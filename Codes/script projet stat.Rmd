@@ -1,0 +1,294 @@
+---
+title: "script projet stat"
+author: "Killian Comby"
+date: "2024-01-31"
+output: html_document
+---
+
+## Data Import
+
+```{r}
+library(dplyr)
+data_merlan = read.csv2(file = "C:/Users/Arnaud/Desktop/Etudes ENSAI/ENSAI 2A/Projet Stat 2A/Donnees/Données Merlan.csv", sep = ",")
+str(data_merlan)
+
+# On transforme les données de type non numériques en type numérique
+
+data_merlan = data_merlan %>%
+  mutate(
+    Surface = as.numeric(Surface),
+    Density = as.numeric(Density),
+    bathymetry = as.numeric(bathymetry),
+    chl_mean = as.numeric(chl_mean),
+    nppv_mean = as.numeric(nppv_mean),
+    o2_mean = as.numeric(o2_mean),
+    o2_cv = as.numeric(o2_cv),
+    o2_perc_25 = as.numeric(o2_perc_25),
+    temp_mean = as.numeric(temp_mean),
+    temp_cv = as.numeric(temp_cv),
+    temp_perc_90 = as.numeric(temp_perc_90),
+    sali_mean = as.numeric(sali_mean),
+    sali_cv = as.numeric(sali_cv),
+    sali_perc_90 = as.numeric(sali_perc_90)
+  )
+```
+
+Comme la première colonne est et restera un mystère, on va s'en débarasser pour le reste de l'étude :
+
+```{r}
+data_merlan = data_merlan[,-1]
+```
+
+De surcroît, la variable `sali_tresh_10` comportant beaucoup de valeurs nulles nous allons l'éliminer
+
+```{r}
+ count = data_merlan[data_merlan$sali_tresh_10!="0","sali_tresh_10"]
+ length(count)
+```
+
+(Il y a 198 valeurs non-nulles sur les 2623 observations soit 7.5% des observations)
+
+```{r}
+library(dplyr)
+data_merlan = data_merlan %>% select(-sali_tresh_10)
+```
+
+Aperçu de la corrélation entre les données
+
+```{r}
+numeric_data = data_merlan %>% select_if(is.numeric)
+
+correlation_matrix_spearman = cor(numeric_data, method = "spearman")
+correlation_matrix_pearson = cor(numeric_data, method = "pearson")
+correlation_matrix_kendall = cor(numeric_data, method = "kendall")
+
+# Éxécuter la ligne ci-dessous pour n'avoir que la correlation en fonction de la densité :
+#correlation_matrix["Density",]
+
+```
+
+On peut faire un plot pour mieux se rendre compte de la relation entre les donneés :
+
+```{r}
+library(corrplot)
+
+par(mfrow=c(1,2))
+
+corrplot(
+  correlation_matrix_pearson,
+  method = "square",
+  type = "upper",
+  addshade = "positive",
+  diag = FALSE,
+  title = "Correlation Matrix using Pearson test"
+  )
+corrplot(
+  correlation_matrix_spearman,
+  method = "square",
+  type = "upper",
+  addshade = "positive",
+  diag = FALSE,
+  title = "Correlation Matrix using Spearman test"
+  )
+
+# corrplot(
+#   correlation_matrix_kendall,
+#   method = "square",
+#   type = "upper",
+#   addshade = "positive",
+#   diag = FALSE,
+#   title = "Correlation Matrix using Kendall test"
+#   )
+
+par(mfrow=c(1,1))
+```
+
+#### Discussion sur la matrice de corrélation
+
+------------------------------------------------------------------------
+
+#### Plot des distributions des variables
+
+```{r}
+library(ggplot2)
+# Histogram
+ggplot(data_merlan, aes(x = Abundance)) + 
+  geom_histogram(bins = 30, aes(y = ..density..), fill = "blue", alpha = 0.7) +
+  geom_density(col = "red") +
+  ggtitle("Histogram of Abundance")
+```
+
+Deuxième plot:
+
+```{r}
+# Subset data for plotting
+subset_data <- data_merlan %>% filter(Abundance <= 50) # Adjust the value as needed for your data
+
+# Plot
+ggplot(subset_data, aes(x = Abundance)) + 
+  geom_histogram(binwidth = 1, color = "black", fill = "white") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12),
+        legend.position = "none")
+```
+
+------------------------------------------------------------------------
+
+#### [Test VIF]{.underline}
+
+To do so, we must make a linear model using variables from the data set.
+
+```{r}
+# One model using the abundance as the response variable
+abundance_model = lm(Abundance ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean+wave_mean, data = data_merlan)
+
+# Another similar model using the density instead as the response variable
+density_model = lm(Density ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean+wave_mean, data = data_merlan)
+```
+
+We can visualize the models:
+
+```{r}
+summary(abundance_model)
+```
+
+We notice that 5 of the 9 coefficents are significant, whereas variables `bathymetry`, `chl_mean`, `nppv_mean` and `sali_mean` cannot explain the model. Further, the R-squared is really low, which challenges the model.
+**So we could maybe delete them.** The model will be the same as these variables are unsignificant. 
+We decide to maintain them in the VIF test to see if there is a correlation.
+
+
+```{r}
+plot(abundance_model)
+```
+
+
+
+```{r}
+summary(density_model)
+```
+
+Now onto the `vif` test using the `car` package
+
+```{r}
+# Load the library
+require(car)
+
+# calculate the VIF
+cat("Abundance Model VIF :\n\n")
+vif(abundance_model)
+cat("\nDensity Model VIF :\n\n")
+vif(density_model)
+```
+
+[***Plotting the results:***]{.underline}
+
+```{r}
+barplot(vif(abundance_model), main = "VIF Values for the Abundance Model", 
+        horiz = FALSE, col = "darkred", las=2, cex.names=0.9)
+barplot(vif(density_model), main = "VIF Values for the Density Model", 
+        horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
+```
+
+[***Interpretation:***]{.underline}
+
+To interpret the VIF test, we will use the following modalities:
+
+- A VIF of 1 indicates no multicollinearity.
+- A VIF between 1 and 5 is generally acceptable.
+- A VIF between 6 and 10 begins to be critical
+- A VIF above 10 indicates problematic multicollinearity between variables.
+
+Funny enough, the VIF values for the abundance and the density models are exactly the same. So we make interpretation for both.
+
+We clearly see that we have two VIF values that are way higher than the other ones, `chl_mean` and `o2_mean`. Removing them from the model and computing the R-squared value again will help us see if there are any improvements. Let's also check the correlation matrix to see if these variables are highly correlated with other ones, that could also be a great explanation of why the VIF values for these variables are so high.
+
+For other ones, their VIF is under 5 so we can consider the independance of the variables. 
+The VIF of `substrat` and `nppw_mean` are particularly near to 1, indicates no multicollinearity.
+
+
+Let's remove the two extreme variables : 
+
+```{r}
+# One model using the abundance as the response variable
+abundance_model_v2 = lm(Abundance ~ bathymetry+substrat+nppv_mean+sali_mean+wave_mean+o2_mean, data = data_merlan)
+# Another similar model using the density instead as the response variable
+density_model_v2 = lm(Density ~ substrat+nppv_mean+temp_mean+sali_mean+wave_mean+o2_mean, data = data_merlan)
+```
+
+```{r}
+# Let's look at the model
+cat("Abundance Model :\n\n")
+summary(abundance_model_v2)
+cat("\nDensity Model :\n\n")
+summary(density_model_v2)
+```
+Almost all the coefficients are highly significant.
+
+```{r}
+# calculate the VIF
+cat("Abundance Model VIF :\n\n")
+vif(abundance_model_v2)
+cat("\nDensity Model VIF :\n\n")
+vif(density_model_v2)
+```
+
+```{r}
+# Plot the VIF values
+barplot(vif(abundance_model_v2), main = "VIF Values for the Abundance Model v.2", 
+        horiz = FALSE, col = "darkred", las=2, cex.names=0.9)
+barplot(vif(density_model_v2), main = "VIF Values for the Density Model v.2", 
+        horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
+```
+
+We obtain VIF values even closer to 1, meaning a no multicollinearity.
+We can also keep these variables to the rest of the study.
+
+------------------------------------------------------------------------
+
+#### Installation du package pour les arbres boostés :
+
+```{r}
+if(!require(xgboost)){
+  install.packages("xgboost")
+}
+# On charge la librairie
+require(xgboost)
+```
+
+##### Tutoriel d'utilisation de xgboost
+
+We will aim to predict wether a mushroom can be eaten or not
+
+Load the agaricus datasets
+
+```{r}
+data("agaricus.test")
+data("agaricus.train")
+train = agaricus.train
+test = agaricus.test
+```
+
+Let’s discover the dimensionality of our datasets.
+
+```{r}
+dim(train$data)
+```
+
+```{r}
+dim(test$data)
+```
+
+As seen below, the `data` is stored in a `dgCmatrix` which is a sparse matrix (a matrix with a large number of zeroes) and `label` is a `numeric` vector (`{0,1}`):
+
+```{r}
+class(train$data)[1]
+```
+
+```{r}
+class(train$label)[1]
+```
+
+```{r}
+```
