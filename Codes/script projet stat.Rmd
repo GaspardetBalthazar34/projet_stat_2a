@@ -9,7 +9,7 @@ output: html_document
 
 ```{r}
 library(dplyr)
-data_merlan = read.csv2(file = "C:/Users/Arnaud/Desktop/Etudes ENSAI/ENSAI 2A/Projet Stat 2A/Donnees/Données Merlan.csv", sep = ",")
+data_merlan = read.csv2("../Donnees/Donnees_Merlan.csv", sep = ",")
 str(data_merlan)
 
 # On transforme les données de type non numériques en type numérique
@@ -154,16 +154,11 @@ We can visualize the models:
 summary(abundance_model)
 ```
 
-We notice that 5 of the 9 coefficents are significant, whereas variables `bathymetry`, `chl_mean`, `nppv_mean` and `sali_mean` cannot explain the model. Further, the R-squared is really low, which challenges the model.
-**So we could maybe delete them.** The model will be the same as these variables are unsignificant. 
-We decide to maintain them in the VIF test to see if there is a correlation.
-
+We notice that 5 of the 9 coefficents are significant, whereas variables `bathymetry`, `chl_mean`, `nppv_mean` and `sali_mean` cannot explain the model. Further, the R-squared is really low, which challenges the model. **So we could maybe delete them.** The model will be the same as these variables are unsignificant. We decide to maintain them in the VIF test to see if there is a correlation.
 
 ```{r}
 plot(abundance_model)
 ```
-
-
 
 ```{r}
 summary(density_model)
@@ -195,20 +190,18 @@ barplot(vif(density_model), main = "VIF Values for the Density Model",
 
 To interpret the VIF test, we will use the following modalities:
 
-- A VIF of 1 indicates no multicollinearity.
-- A VIF between 1 and 5 is generally acceptable.
-- A VIF between 6 and 10 begins to be critical
-- A VIF above 10 indicates problematic multicollinearity between variables.
+-   A VIF of 1 indicates no multicollinearity.
+-   A VIF between 1 and 5 is generally acceptable.
+-   A VIF between 6 and 10 begins to be critical
+-   A VIF above 10 indicates problematic multicollinearity between variables.
 
 Funny enough, the VIF values for the abundance and the density models are exactly the same. So we make interpretation for both.
 
 We clearly see that we have two VIF values that are way higher than the other ones, `chl_mean` and `o2_mean`. Removing them from the model and computing the R-squared value again will help us see if there are any improvements. Let's also check the correlation matrix to see if these variables are highly correlated with other ones, that could also be a great explanation of why the VIF values for these variables are so high.
 
-For other ones, their VIF is under 5 so we can consider the independance of the variables. 
-The VIF of `substrat` and `nppw_mean` are particularly near to 1, indicates no multicollinearity.
+For other ones, their VIF is under 5 so we can consider the independance of the variables. The VIF of `substrat` and `nppw_mean` are particularly near to 1, indicates no multicollinearity.
 
-
-Let's remove the two extreme variables : 
+Let's remove the two extreme variables :
 
 ```{r}
 # One model using the abundance as the response variable
@@ -224,6 +217,7 @@ summary(abundance_model_v2)
 cat("\nDensity Model :\n\n")
 summary(density_model_v2)
 ```
+
 Almost all the coefficients are highly significant.
 
 ```{r}
@@ -242,8 +236,7 @@ barplot(vif(density_model_v2), main = "VIF Values for the Density Model v.2",
         horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
 ```
 
-We obtain VIF values even closer to 1, meaning a no multicollinearity.
-We can also keep these variables to the rest of the study.
+We obtain VIF values even closer to 1, meaning a no multicollinearity. We can also keep these variables to the rest of the study.
 
 ------------------------------------------------------------------------
 
@@ -291,4 +284,160 @@ class(train$label)[1]
 ```
 
 ```{r}
+```
+
+------------------------------------------------------------------------
+
+## Commencement des arbres de regréssion boostés
+
+Passons à la création d'une `dcgMatrix` à partir de nos données :
+
+```{r}
+# Let's start by getting rid of all the variables that won't be useful for the regression tree
+if(!(require(caret))){
+  install.packages('caret')
+}
+
+require(caret)
+```
+
+Creation of the training data set and the testing data set :
+
+```{r}
+set.seed(123) # For reproductibility
+
+# Let's reset numeric_data here just in case it has been modified somewhere else
+numeric_data = data_merlan %>% select_if(is.numeric)
+
+# Remove the Year and Month columns
+numeric_data = numeric_data %>% select(-c(Month,Year,Surface,Abundance))
+
+index <- createDataPartition(numeric_data$Density, p = 0.8, list=FALSE)
+
+# Using the index to separate the data set
+train_data = numeric_data[index, ] # Training Data
+test_data = numeric_data[-index, ] # Test Data
+
+# Let's check the size of our new data sets
+nrow(train_data)
+nrow(test_data)
+
+# Do not forget to extract Desnity from the dataset
+train_data_label = unlist(train_data$Density)
+train_data = train_data %>% select(-Density)
+test_data_label = unlist(test_data$Density)
+test_data = test_data %>% select(-Density)
+```
+
+Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
+
+```{r}
+# Construction of the dcgMatrix object for the train dataset
+
+dtrain <- xgb.DMatrix(data = as.matrix(train_data), label = train_data_label)
+```
+
+```{r}
+# Construction of the dcgMatrix object for the test dataset
+
+dtest <- xgb.DMatrix(data = as.matrix(test_data), label = test_data_label)
+```
+
+Trying to train the model with `dcgMatrix` :
+
+```{r}
+bstDMatrix <- xgboost(
+  data = dtrain,
+  max.depth = 6,
+  eta = 1,
+  nthread = 4,
+  nrounds = 100,
+  objective = "reg:squarederror")
+```
+
+Now onto a basic prediciton using XGBoost :
+
+```{r}
+pred <- predict(bstDMatrix, dtest)
+```
+
+Computing the RMSE to check the perfomrance of the prediction
+
+```{r}
+# RMSE
+rmse <- sqrt(mean((pred - test_data_label)^2))
+
+# Let's compute the range of our dataset to have a better understanding of the rmse value :
+range = diff(range(test_data_label))
+
+# 
+rmse_perc = (rmse/range)*100
+
+cat("The Error (RMSE) percentage : ",rmse_perc)
+```
+
+Now we want to save the model, and visualize some of the trees !
+
+```{r}
+# Saving the model (including all trees)
+xgb.save(bstDMatrix, "first_basic_model_xgboost.model")
+
+# Loading the preivously saved model (for verification purpose)
+bst_saved <- xgb.load("first_basic_model_xgboost.model")
+```
+
+Visualization of 3 trees from the previous model :
+
+```{r}
+if(!(require(DiagrammeR))){
+  install.packages("DiagrammeR")
+}
+require(DiagrammeR)
+
+if(!(require(DiagrammeRsvg))){
+  install.packages("DiagrammeRsvg")
+}
+require(DiagrammeRsvg)
+
+if(!(require(rsvg))){
+  install.packages("rsvg")
+}
+require(rsvg)
+
+# Visualization of trees 1, 41 and 99 (the tree index in xgboost model is zero-based)
+# xgb.plot.tree(model = bst_saved, trees = c(0,40,98))
+gr <- xgb.plot.tree(model = bst_saved,
+                   trees = 98,
+                   plot_width = 2400,
+                   plot_height = 3600,
+                   render = F,
+                   feature_names = colnames(train_data)
+                   )
+
+# In order to create a valid graph, we must use the render = F option
+
+export_graph(gr, '../Donnees/tree.png', width = 2400, height = 3600)
+```
+
+We can also use `xgb.ggplot.importance()` to directly visualize the variables's importance :
+
+Package Dependecies :
+
+```{r}
+if(!(require(Ckmeans.1d.dp))){
+  install.packages("Ckmeans.1d.dp")
+}
+require(Ckmeans.1d.dp)
+```
+
+```{r}
+importance_matrix <- xgb.importance(
+  colnames(train_data), model = bst_saved
+  )
+
+xgb.plot.importance(importance_matrix, rel_to_first = TRUE, xlab = "Relative importance")
+
+(gg <- xgb.ggplot.importance(importance_matrix, measure = "Frequency", rel_to_first = TRUE))
+gg + ggplot2::ylab("Frequency")
+
 ```
