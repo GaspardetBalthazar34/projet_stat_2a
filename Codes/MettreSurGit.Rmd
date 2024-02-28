@@ -1,0 +1,607 @@
+---
+title: "script projet stat"
+author: "Killian Comby"
+date: "2024-01-31"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+## Packages et Librairie
+
+```{r}
+
+
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("corrplot")) install.packages("corrplot")
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+```
+
+## Data Import
+
+```{r}
+data_merlan = read.csv2(file = "../Donnees/Données Merlan.csv", sep = ",")
+```
+
+```{r}
+str(data_merlan)
+```
+
+On modifie les types des variables pour qu'ils soient plus pertinents.
+
+On passe `Year`, `Month` et `Origin` et `Species` en facteurs.
+
+Attention cependant à ne pas passer `Lat` et `Long` en numeric car on perdrait des chriffres significatis.
+
+```{r}
+# On transforme les données de type non numériques en type numérique
+data_merlan = data_merlan %>%
+  mutate(
+    Surface = as.numeric(Surface),
+    Density = as.numeric(Density),
+    bathymetry = as.numeric(bathymetry),
+    chl_mean = as.numeric(chl_mean),
+    nppv_mean = as.numeric(nppv_mean),
+    o2_mean = as.numeric(o2_mean),
+    o2_cv = as.numeric(o2_cv),
+    o2_perc_25 = as.numeric(o2_perc_25),
+    temp_mean = as.numeric(temp_mean),
+    temp_cv = as.numeric(temp_cv),
+    temp_perc_90 = as.numeric(temp_perc_90),
+    sali_mean = as.numeric(sali_mean),
+    sali_cv = as.numeric(sali_cv),
+    sali_perc_90 = as.numeric(sali_perc_90)
+  )
+
+# Et les variables nécessaires en facteurs 
+# Converting a variable into an ordered factor with specified levels
+data_merlan$Year <- factor(data_merlan$Year)
+data_merlan$Month <- factor(data_merlan$Month)
+data_merlan$Origin <- factor(data_merlan$Origin)
+data_merlan$Species <- factor(data_merlan$Species)
+
+
+
+```
+
+Comme la première colonne est et restera un mystère, on va s'en débarasser pour le reste de l'étude :
+
+```{r}
+data_merlan = data_merlan %>% select(-X)
+```
+
+L'espèce étudiée est également unique (Merlangius merlangus), on supprime cette variable.
+On pourra la réintroduire si l'on compare merlan et sole.
+
+```{r}
+data_merlan = data_merlan %>% select(-Species)
+```
+
+De surcroît, la variable `sali_tresh_10` comportant beaucoup de valeurs nulles nous allons l'éliminer
+
+```{r}
+ count = data_merlan[data_merlan$sali_tresh_10!="0","sali_tresh_10"]
+ length(count)
+```
+
+(Il y a 198 valeurs non-nulles sur les 2623 observations soit 7.5% des observations)
+
+```{r}
+library(dplyr)
+data_merlan = data_merlan %>% select(-sali_tresh_10)
+```
+
+```{r}
+summary(data_merlan)
+```
+
+### -------------------- DISTRIBUTION DES DONNEES ----------------------
+
+```         
+        A FAIRE : 
+        - afficher histogramme des données pour essayer de trouver leur distribution 
+        - mettre une courbe de loi normale sur chaque histogramme / affichezr la courbe de densité avec ggplot 2 
+```
+
+### Plot des distributions des variables
+
+**Pt pas besoin de voir distribution de ABundance et density car variables d'intêret donc supprimées pour matrice corrélation**
+
+On regarde la distribution des variables.
+Pour cela, on regarde la distribution des variables d'une même catégorie.
+On cherche à déterminer si les variables suivent une loi normale afin de choisir par la suite la meilleure manière de calculer les corrélations entre variables.
+
+**Variables cibles :**
+
+```{r}
+# afficher distribution des variables 
+variable_names_temp <- c("Abundance", "Density")
+
+for (var_name in variable_names_temp) {
+  print(ggplot(data_merlan, aes_string(x = var_name)) + 
+          geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+          #geom_density(alpha = 0.5, fill = "darkblue") + # Pour ajouter une densité 
+          ggtitle(paste("Distribution of", var_name)) +
+          xlab(var_name) +
+          ylab("Frequency"))
+}
+```
+
+**Variables au pif :**
+
+```{r}
+# afficher distribution des variables 
+variable_names_temp <- c("bathymetry", "substrat", "chl_mean", "nppv_mean")
+
+for (var_name in variable_names_temp) {
+  print(ggplot(data_merlan, aes_string(x = var_name)) + 
+          geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+          #geom_density(alpha = 0.5, fill = "darkblue") + # Pour ajouter une densité 
+          ggtitle(paste("Distribution of", var_name)) +
+          xlab(var_name) +
+          ylab("Frequency"))
+}
+```
+
+Lois a priori inconnues.
+Peut-être chi-2 sur nppv_mean
+
+```{r}
+# afficher distribution des variables 
+variable_names_temp <- c("o2_mean", "o2_cv", "o2_perc_25")
+
+for (var_name in variable_names_temp) {
+  print(ggplot(data_merlan, aes_string(x = var_name)) + 
+          geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+          #geom_density(alpha = 0.5, fill = "darkblue") + # Pour ajouter une densité 
+          ggtitle(paste("Distribution of", var_name)) +
+          xlab(var_name) +
+          ylab("Frequency"))
+}
+```
+
+Lois inconnues a priori.
+
+**Température :**
+
+```{r}
+# afficher distribution des variables 
+variable_names_temp <- c("temp_mean", "temp_cv", "temp_perc_90")
+
+for (var_name in variable_names_temp) {
+  print(ggplot(data_merlan, aes_string(x = var_name)) + 
+          geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+          #geom_density(alpha = 0.5, fill = "darkblue") + # Pour ajouter une densité 
+          ggtitle(paste("Distribution of", var_name)) +
+          xlab(var_name) +
+          ylab("Frequency"))
+}
+```
+
+A priori aucune loi connue ne ressort.
+Peut-être que `tmp_cv` se rapproche d'une loi normale mais ce n'est pas convaincant.
+
+**Salinité :**
+
+```{r}
+# afficher distribution des variables 
+variable_names <- c("sali_mean", "sali_cv", "sali_perc_90", "wave_mean")
+
+for (var_name in variable_names) {
+  print(ggplot(data_merlan, aes_string(x = var_name)) + 
+          geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+          ggtitle(paste("Distribution of", var_name)) +
+          xlab(var_name) +
+          ylab("Frequency"))
+}
+```
+
+Pareil : pas de loi normale en vue
+
+### -------------------- CORRELATIONS ----------------------
+
+### Aperçu de la corrélation entre les données :
+
+Choix des variables : les variables du mois et de l'année sont à retirer car nous n'avons pas de cartes pour projeter ces données.
+L'abondance et la densité sont également à retirer puisqu'il s'agira de la variable réponse.
+
+```{r}
+# Suppression des variables non utiles pour la matrice de corrélation
+data_corr <- data_merlan %>% select(c(-Year, -Month, -Abundance, -Density))
+
+# Conservation des données numériques
+data_corr <- data_corr %>% select_if(is.numeric)
+```
+
+```{r}
+
+correlation_matrix_spearman = cor(data_corr, method = "spearman")
+correlation_matrix_pearson = cor(data_corr, method = "pearson")
+correlation_matrix_kendall = cor(data_corr, method = "kendall")
+
+# Éxécuter la ligne ci-dessous pour n'avoir que la correlation en fonction de la densité :
+#correlation_matrix["Density",]
+
+```
+
+On peut faire un plot pour mieux se rendre compte de la relation entre les donneés :
+
+On affiche d'abord la matrice de corrélation calculée avec le test de Pearson (comme Hugo l'avait fait).
+Cependant, le test de Pearson suppose que les données suivent une loi normale, ce qui n'est pas le cas.
+On préfère donc retenir les matrices de corrélation calculées avec le test de Spearman ou de Kendall, qui sont eux indépendants de la distribution des données.
+
+```{r}
+# Visualisation avec des carrés
+par(mfrow=c(1,3))
+
+# Pearson
+corrplot(
+  correlation_matrix_pearson,
+  method = "square",
+  addshade = "positive",
+  diag = FALSE,
+  type = "upper",
+  #order = 'AOE',
+  title = "Correlation Matrix using Pearson test"
+  )
+
+#  Spearman 
+corrplot(
+  correlation_matrix_spearman,
+  method = "square",
+  addshade = "positive",
+  diag = FALSE,
+  type = "upper",
+  #order = 'AOE',
+  title = "Correlation Matrix using Spearman test"
+  )
+
+# Kendall
+corrplot(
+  correlation_matrix_kendall,
+  method = "square",
+  addshade = "positive",
+  diag = FALSE,
+  type = "upper",
+  #order = 'AOE',
+  title = "Correlation Matrix using Kendall test"
+  )
+
+par(mfrow=c(1,1))
+```
+
+On représente aussi avec les valeurs des corrélation, mais on voit rien (même avec 1 image)
+
+```{r}
+# Avec la valeur des corrélation 
+par(mfrow=c(1,3))
+
+# Pearson
+corrplot(
+  correlation_matrix_pearson,
+  method = "number",
+  type = "upper",
+  addshade = "positive",
+  diag = FALSE,
+  #order = 'AOE',
+  title = "Correlation Matrix using Pearson test"
+  )
+# Spearman
+corrplot(
+  correlation_matrix_spearman,
+  method = "number",
+  type = "upper",
+  addshade = "positive",
+  diag = FALSE,
+  #order = 'AOE',
+  title = "Correlation Matrix using Spearman test"
+  )
+
+# Kendall
+corrplot(
+  correlation_matrix_kendall,
+  method = "number",
+  type = "upper",
+  addshade = "positive",
+  diag = FALSE,
+  #order = 'AOE',
+  title = "Correlation Matrix using Kendall test"
+  )
+
+par(mfrow=c(1,1))
+
+```
+
+#### Discussion sur la matrice de corrélation
+
+Certaines corrélations sont différentes entre Pearson et Spearman/Kendall, notamment pour les variables `surface` et `bathymetry`.
+Les matrices de Spearman et Kendall révèlent les mêmes corrélations, bien que Kendall soit plus edulcorée en renvoyant des corrélations moins fortes.
+
+```         
+        A FAIRE : sélectionner les variables qu'on conserve en collant le plus possible avec celles d'Hugo
+```
+
+------------------------------------------------------------------------
+
+#### [Test VIF]{.underline}
+
+To do so, we must make a linear model using variables from the data set.
+
+```{r}
+# One model using the abundance as the response variable
+abundance_model = lm(Abundance ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean+wave_mean, data = data_merlan)
+
+# Another similar model using the density instead as the response variable
+density_model = lm(Density ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean+wave_mean, data = data_merlan)
+```
+
+We can visualize the models:
+
+```{r}
+summary(abundance_model)
+```
+
+We notice that 5 of the 9 coefficents are significant, whereas variables `bathymetry`, `chl_mean`, `nppv_mean` and `sali_mean` cannot explain the model.
+Further, the R-squared is really low, which challenges the model.
+**So we could maybe delete them.** The model will be the same as these variables are unsignificant.
+We decide to maintain them in the VIF test to see if there is a correlation.
+
+```{r}
+plot(abundance_model)
+```
+
+```{r}
+summary(density_model)
+```
+
+Now onto the `vif` test using the `car` package
+
+```{r}
+# Load the library
+require(car)
+
+# calculate the VIF
+cat("Abundance Model VIF :\n\n")
+vif(abundance_model)
+cat("\nDensity Model VIF :\n\n")
+vif(density_model)
+```
+
+[***Plotting the results:***]{.underline}
+
+```{r}
+barplot(vif(abundance_model), main = "VIF Values for the Abundance Model", 
+        horiz = FALSE, col = "darkred", las=2, cex.names=0.9)
+barplot(vif(density_model), main = "VIF Values for the Density Model", 
+        horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
+```
+
+[***Interpretation:***]{.underline}
+
+To interpret the VIF test, we will use the following modalities:
+
+-   A VIF of 1 indicates no multicollinearity.
+-   A VIF between 1 and 5 is generally acceptable.
+-   A VIF between 6 and 10 begins to be critical
+-   A VIF above 10 indicates problematic multicollinearity between variables.
+
+Funny enough, the VIF values for the abundance and the density models are exactly the same.
+So we make interpretation for both.
+
+We clearly see that we have two VIF values that are way higher than the other ones, `chl_mean` and `o2_mean`.
+Removing them from the model and computing the R-squared value again will help us see if there are any improvements.
+Let's also check the correlation matrix to see if these variables are highly correlated with other ones, that could also be a great explanation of why the VIF values for these variables are so high.
+
+For other ones, their VIF is under 5 so we can consider the independance of the variables.
+The VIF of `substrat` and `nppw_mean` are particularly near to 1, indicates no multicollinearity.
+
+Let's remove the two extreme variables :
+
+```{r}
+# One model using the abundance as the response variable
+abundance_model_v2 = lm(Abundance ~ bathymetry+substrat+nppv_mean+sali_mean+wave_mean+o2_mean, data = data_merlan)
+# Another similar model using the density instead as the response variable
+density_model_v2 = lm(Density ~ substrat+nppv_mean+temp_mean+sali_mean+wave_mean+o2_mean, data = data_merlan)
+```
+
+```{r}
+# Let's look at the model
+cat("Abundance Model :\n\n")
+summary(abundance_model_v2)
+cat("\nDensity Model :\n\n")
+summary(density_model_v2)
+```
+
+Almost all the coefficients are highly significant.
+
+```{r}
+# calculate the VIF
+cat("Abundance Model VIF :\n\n")
+vif(abundance_model_v2)
+cat("\nDensity Model VIF :\n\n")
+vif(density_model_v2)
+```
+
+```{r}
+# Plot the VIF values
+barplot(vif(abundance_model_v2), main = "VIF Values for the Abundance Model v.2", 
+        horiz = FALSE, col = "darkred", las=2, cex.names=0.9)
+barplot(vif(density_model_v2), main = "VIF Values for the Density Model v.2", 
+        horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
+```
+
+We obtain VIF values even closer to 1, meaning a no multicollinearity.
+We can also keep these variables to the rest of the study.
+
+------------------------------------------------------------------------
+
+#### Installation du package pour les arbres boostés :
+
+```{r}
+if(!require(xgboost)){
+  install.packages("xgboost")
+}
+# On charge la librairie
+require(xgboost)
+```
+
+### Commencement des arbres de regréssion boostés
+
+Passons à la création d'une `dcgMatrix` à partir de nos données :
+
+```{r}
+# Let's start by getting rid of all the variables that won't be useful for the regression tree
+if(!(require(caret))){
+  install.packages('caret')
+}
+
+require(caret)
+```
+
+Creation of the training data set and the testing data set :
+
+```{r}
+set.seed(123) # For reproductibility
+
+# Let's reset numeric_data here just in case it has been modified somewhere else
+numeric_data = data_merlan %>% select_if(is.numeric)
+
+# Remove the Year and Month columns
+numeric_data = numeric_data %>% select(-c(Surface,Abundance))
+
+index <- createDataPartition(numeric_data$Density, p = 0.8, list=FALSE)
+
+# Using the index to separate the data set
+train_data = numeric_data[index, ] # Training Data
+test_data = numeric_data[-index, ] # Test Data
+
+# Let's check the size of our new data sets
+nrow(train_data)
+nrow(test_data)
+
+# Do not forget to extract Desnity from the dataset
+train_data_label = unlist(train_data$Density)
+train_data = train_data %>% select(-Density)
+test_data_label = unlist(test_data$Density)
+test_data = test_data %>% select(-Density)
+```
+
+Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
+
+```{r}
+# Construction of the dcgMatrix object for the train dataset
+
+dtrain <- xgb.DMatrix(data = as.matrix(train_data), label = train_data_label)
+```
+
+```{r}
+# Construction of the dcgMatrix object for the test dataset
+
+dtest <- xgb.DMatrix(data = as.matrix(test_data), label = test_data_label)
+```
+
+Trying to train the model with `dcgMatrix` :
+
+```{r}
+bstDMatrix <- xgboost(
+  data = dtrain,
+  max.depth = 6,
+  eta = 1,
+  nthread = 4,
+  nrounds = 100,
+  objective = "reg:squarederror")
+```
+
+Now onto a basic prediciton using XGBoost :
+
+```{r}
+pred <- predict(bstDMatrix, dtest)
+```
+
+Computing the RMSE to check the perfomrance of the prediction
+
+```{r}
+# RMSE
+rmse <- sqrt(mean((pred - test_data_label)^2))
+
+# Let's compute the range of our dataset to have a better understanding of the rmse value :
+range = diff(range(test_data_label))
+
+# 
+rmse_perc = (rmse/range)*100
+
+cat("The Error (RMSE) percentage : ",rmse_perc)
+```
+
+Now we want to save the model, and visualize some of the trees !
+
+```{r}
+# Saving the model (including all trees)
+xgb.save(bstDMatrix, "first_basic_model_xgboost.model")
+
+# Loading the preivously saved model (for verification purpose)
+bst_saved <- xgb.load("first_basic_model_xgboost.model")
+```
+
+Visualization of 3 trees from the previous model :
+
+```{r}
+if(!(require(DiagrammeR))){
+  install.packages("DiagrammeR")
+}
+require(DiagrammeR)
+
+if(!(require(DiagrammeRsvg))){
+  install.packages("DiagrammeRsvg")
+}
+require(DiagrammeRsvg)
+
+if(!(require(rsvg))){
+  install.packages("rsvg")
+}
+require(rsvg)
+
+# Visualization of trees 1, 41 and 99 (the tree index in xgboost model is zero-based)
+# xgb.plot.tree(model = bst_saved, trees = c(0,40,98))
+gr <- xgb.plot.tree(model = bst_saved,
+                   trees = 98,
+                   plot_width = 2400,
+                   plot_height = 3600,
+                   render = F,
+                   feature_names = colnames(train_data)
+                   )
+
+# In order to create a valid graph, we must use the render = F option
+
+export_graph(gr, '../Donnees/tree.png', width = 2400, height = 3600)
+```
+
+We can also use `xgb.ggplot.importance()` to directly visualize the variables's importance :
+
+Package Dependecies :
+
+```{r}
+if(!(require(Ckmeans.1d.dp))){
+  install.packages("Ckmeans.1d.dp")
+}
+require(Ckmeans.1d.dp)
+```
+
+```{r}
+importance_matrix <- xgb.importance(
+  colnames(train_data), model = bst_saved
+  )
+
+xgb.plot.importance(importance_matrix, rel_to_first = TRUE, xlab = "Relative importance")
+
+(gg <- xgb.ggplot.importance(importance_matrix, measure = "Frequency", rel_to_first = TRUE))
+gg + ggplot2::ylab("Frequency")
+
+```
