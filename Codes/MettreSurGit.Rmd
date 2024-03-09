@@ -24,6 +24,11 @@ library(ggplot2)
 library(corrplot)
 ```
 
+```{r}
+rm(list=ls())
+```
+
+
 ## Data Import
 
 ```{r}
@@ -66,8 +71,8 @@ data_merlan$Year <- factor(data_merlan$Year)
 data_merlan$Month <- factor(data_merlan$Month)
 data_merlan$Origin <- factor(data_merlan$Origin)
 data_merlan$Species <- factor(data_merlan$Species)
-
-
+data_merlan$substrat <- factor(data_merlan$substrat)
+data_merlan$wave_mean <- factor(data_merlan$wave_mean)
 
 ```
 
@@ -211,10 +216,11 @@ Pareil : pas de loi normale en vue
 
 Choix des variables : les variables du mois et de l'année sont à retirer car nous n'avons pas de cartes pour projeter ces données.
 L'abondance et la densité sont également à retirer puisqu'il s'agira de la variable réponse.
+** on retire la surface POURQUOI **
 
 ```{r}
 # Suppression des variables non utiles pour la matrice de corrélation
-data_corr <- data_merlan %>% select(c(-Year, -Month, -Abundance, -Density))
+data_corr <- data_merlan %>% select(c(-Year, -Month, -Abundance, -Density, -Surface))
 
 # Conservation des données numériques
 data_corr <- data_corr %>% select_if(is.numeric)
@@ -222,8 +228,8 @@ data_corr <- data_corr %>% select_if(is.numeric)
 
 ```{r}
 
-correlation_matrix_spearman = cor(data_corr, method = "spearman")
 correlation_matrix_pearson = cor(data_corr, method = "pearson")
+correlation_matrix_spearman = cor(data_corr, method = "spearman")
 correlation_matrix_kendall = cor(data_corr, method = "kendall")
 
 # Éxécuter la ligne ci-dessous pour n'avoir que la correlation en fonction de la densité :
@@ -319,6 +325,27 @@ par(mfrow=c(1,1))
 
 ```
 
+
+# tentative de fixer le seuil --> ne marche pas 
+
+On ne garde que les variables avec une corrélation plus petite que 0.75 :
+
+```{r}
+# Seuil
+corr_seuil <- 0.75
+
+# CRéer une matrice de TRUE/FALSE indiquant si chaque élément est en dessous du seuil ou non
+sous_seuil <- abs(correlation_matrix_spearman) < corr_seuil
+
+# Use subset to keep only the variables with correlation below the threshold
+filtered_correlation_matrix <- subset.matrix(correlation_matrix_spearman, select = sous_seuil)
+
+# Print the filtered correlation matrix
+print(filtered_correlation_matrix)
+```
+
+
+
 #### Discussion sur la matrice de corrélation
 
 Certaines corrélations sont différentes entre Pearson et Spearman/Kendall, notamment pour les variables `surface` et `bathymetry`.
@@ -331,6 +358,75 @@ Les matrices de Spearman et Kendall révèlent les mêmes corrélations, bien qu
 ------------------------------------------------------------------------
 
 #### [Test VIF]{.underline}
+
+#### Troisième tentative avec packe usdm 
+
+
+```{r}
+if (!require("usdm")) install.packages("usdm")
+```
+
+```{r}
+library(usdm)
+```
+Identifie les variables colinéaires qui devraient être exclues:
+
+```{r}
+vif(data_corr) 
+```
+
+```{r}
+vifcor(data_corr, th=0.9) # th : threshold = seuil 
+```
+
+
+
+
+
+#### Deuxième tentative avec GLM
+
+Import du packages car : 
+
+```{r}
+if (!require("car")) install.packages("car")
+```
+
+```{r}
+library(car)
+```
+
+
+Pour l'abondance :
+
+```{r}
+# One model using the abundance as the response variable
+abundance_model = glm(Abundance ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean, data = data_merlan)
+
+abundance_model
+```
+```{r}
+vif(abundance_model)
+```
+Pour la densité : (affiche la même sortie VIF)
+
+```{r}
+# Another similar model using the density instead as the response variable
+density_model = glm(Density ~ bathymetry+substrat+chl_mean+nppv_mean+o2_mean+temp_mean+sali_mean, data = data_merlan)
+
+density_model
+```
+
+```{r}
+vif(density_model)
+```
+
+
+
+
+
+
+
+#### Premier test avec regression --> pas bon pas bon
 
 To do so, we must make a linear model using variables from the data set.
 
