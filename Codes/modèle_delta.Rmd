@@ -1,0 +1,131 @@
+# Modèle delta
+
+```{r}
+# On charge les librairies
+
+require(xgboost)
+require(caret)
+require(dplyr)
+```
+
+Ballbla
+
+```{r}
+set.seed(123) # For reproductibility
+
+# Let's reset numeric_data here just in case it has been modified somewhere else
+final_data = data_merlan %>% select_if(is.numeric)
+
+# Remove the Year and Month columns
+final_data = final_data %>% select(-c(Surface,Abundance))
+
+# Do not forget to extract Desnity from the dataset
+final_data_label = unlist(final_data$Density)
+# Transformation pour le 
+final_data_label_binary = ifelse(test = final_data_label==0,0,1)
+final_data_label_binary = as.factor(final_data_label_binary)
+
+# Supress Density from the explanatory variables
+final_data = final_data %>% select(-Density)
+```
+
+Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
+
+```{r}
+# Construction of the dcgMatrix object for the dataset
+
+dmatrix <- xgb.DMatrix(data = as.matrix(final_data), label = final_data_label_binary)
+```
+
+On définit les paramètres du modèle :
+
+```{r}
+params <- list(
+  booster = "gbtree",
+  objective = "binary:logistic", # Utilisez "reg:squarederror" pour la régression
+  eta = 0.3,
+  max_depth = 6,
+  min_child_weight = 1,
+  subsample = 1,
+  colsample_bytree = 1
+)
+```
+
+Et maintenant on lance la validation croisée
+
+```{r}
+cv.nfold <- 5 # Nombre de plis pour la validation croisée
+nrounds <- 100 # Nombre d'itérations de boosting
+
+cv_results <- xgb.cv(
+  params = params,
+  data = dmatrix,
+  label = labels,
+  nfold = cv.nfold,
+  nrounds = nrounds,
+  metrics = "rmse", # Utiliser "error" pour la classification, "rmse" pour la régression, etc.
+  early_stopping_rounds = 10, # arrêt précoce
+  stratified = TRUE, # si la classification, pour garder la même proportion de classes dans chaque pli
+  seed = 123 # pour la reproductibilité
+)
+```
+
+Affichage des résultats
+
+```{r}
+print(cv_results$evaluation_log)
+```
+
+Tentative d'optimisation des paramètres :
+
+```{r}
+grid <- expand.grid(
+  nrounds = c(100, 200),
+  eta = c(0.01, 0.05, 0.1),
+  max_depth = c(3, 6, 9),
+  gamma = c(0, 0.1, 0.2),
+  colsample_bytree = c(0.5, 0.75, 1),
+  min_child_weight = c(1, 3, 5),
+  subsample = c(0.5, 0.75, 1)
+)
+```
+
+Configuration du contrôle de la formation
+
+```{r}
+control <- trainControl(method = "cv", number = 5, search = "grid")
+```
+
+Entraînement du modèle (Attention ce code est très long (env. 1h d'éxécution))
+
+```{r}
+xgb_model <- train(
+  final_data,
+  final_data_label_binary,
+  trControl = control,
+  tuneGrid = grid,
+  method = "xgbTree"
+)
+```
+
+Showing the best model :
+
+```{r}
+xgb_model$bestTune
+```
+
+Le meilleur modèle est donc le suivant :
+
+nrounds = 200
+
+max_depth = 6
+
+eta = 0.05
+
+gamma = 0.1
+
+colsample_bytree = 1
+
+min_child_weight = 3
+
+subsample = 0.75
