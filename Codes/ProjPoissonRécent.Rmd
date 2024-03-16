@@ -31,7 +31,7 @@ rm(list=ls())
 ## Data Import
 
 ```{r}
-data_merlan = read.csv2(file = "Données Merlan.csv", sep = ",")
+data_merlan = read.csv2(file = "../Donnees/Données Merlan.csv", sep = ",")
 ```
 
 ```{r}
@@ -107,9 +107,11 @@ summary(data_merlan)
 
 ### -------------------- DISTRIBUTION DES DONNEES ----------------------
 
-            A FAIRE : 
-            - afficher histogramme des données pour essayer de trouver leur distribution 
-            - mettre une courbe de loi normale sur chaque histogramme / affichezr la courbe de densité avec ggplot 2 
+```         
+        A FAIRE : 
+        - afficher histogramme des données pour essayer de trouver leur distribution 
+        - mettre une courbe de loi normale sur chaque histogramme / affichezr la courbe de densité avec ggplot 2 
+```
 
 ### Plot des distributions des variables
 
@@ -120,7 +122,7 @@ On regarde donc la distribution des variables, que l'on regroupe selon une même
 
 On créer pour cela une fonction calculant la moyenne et la variance de chaqur variable et on affiche la loi normale avec ces paramètres.
 
-[Création de la fonction]{.ul}
+[Création de la fonction]{.underline}
 
 ```{r}
 # Fonction pour afficher la densité avec la loi normale associée
@@ -147,7 +149,6 @@ afficher_dens_et_norm <- function(nom_variable) {
     theme_minimal()
 }
 ```
-
 
 **Variables cibles :**
 
@@ -218,7 +219,7 @@ Pareil : pas de loi normale en vue
 
 Choix des variables : les variables du mois et de l'année sont à retirer car nous n'avons pas de cartes pour projeter ces données.
 L'abondance et la densité sont également à retirer puisqu'il s'agira de la variable réponse.
-** on retire la surface POURQUOI **
+\*\* on retire la surface POURQUOI \*\*
 
 ```{r}
 # Suppression des variables non utiles pour la matrice de corrélation
@@ -350,17 +351,17 @@ print(filtered_correlation_matrix)
 Certaines corrélations sont différentes entre Pearson et Spearman/Kendall, notamment pour les variables `surface` et `bathymetry`.
 Les matrices de Spearman et Kendall révèlent les mêmes corrélations, bien que Kendall soit plus edulcorée en renvoyant des corrélations moins fortes.
 
-            A FAIRE : sélectionner les variables qu'on conserve en collant le plus possible avec celles d'Hugo
+```         
+        A FAIRE : sélectionner les variables qu'on conserve en collant le plus possible avec celles d'Hugo
+```
 
 ------------------------------------------------------------------------
 
-#### [Test VIF]{.ul}
-
+#### [Test VIF]{.underline}
 
 #### Quatrième tentative : ChatGPT
-FONCTIONNE MAIS DEMANDER INTERPRETATION
-**Manque variable Bathymetry**
 
+FONCTIONNE MAIS DEMANDER INTERPRETATION **Manque variable Bathymetry**
 
 ```{r}
 lm_models <- lapply(colnames(data_corr), function(var) lm(paste(var, "~ ."), data = data_corr))
@@ -373,8 +374,8 @@ print(vif_values)
 
 ```
 
-
 #### Troisième tentative avec packe usdm
+
 FONCTIONNE
 
 ```{r}
@@ -433,7 +434,7 @@ density_model
 vif(density_model)
 ```
 
-#### Premier test avec regression --> pas bon pas bon
+#### Premier test avec regression --\> pas bon pas bon
 
 To do so, we must make a linear model using variables from the data set.
 
@@ -477,7 +478,7 @@ cat("\nDensity Model VIF :\n\n")
 vif(density_model)
 ```
 
-[***Plotting the results:***]{.ul}
+[***Plotting the results:***]{.underline}
 
 ```{r}
 barplot(vif(abundance_model), main = "VIF Values for the Abundance Model", 
@@ -486,7 +487,7 @@ barplot(vif(density_model), main = "VIF Values for the Density Model",
         horiz = FALSE, col = "darkorange", las=2, cex.names=0.9)
 ```
 
-[***Interpretation:***]{.ul}
+[***Interpretation:***]{.underline}
 
 To interpret the VIF test, we will use the following modalities:
 
