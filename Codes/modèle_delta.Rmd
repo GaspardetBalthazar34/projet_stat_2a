@@ -129,3 +129,103 @@ colsample_bytree = 1
 min_child_weight = 3
 
 subsample = 0.75
+
+Now onto the positive density model (second part of the delta model)
+
+```{r}
+# data for the positive density model
+positive_density_model_data = data_merlan %>% select_if(is.numeric)
+
+positive_density_model_data = positive_density_model_data %>%
+  filter(Density > 0)
+
+positive_density_model_data = positive_density_model_data %>% 
+  select(-c(Abundance,Surface))
+
+positive_density_model_label = unlist(positive_density_model_data$Density)
+
+# Remove density from the explanatory variables
+positive_density_model_data = positive_density_model_data %>% 
+  select(-Density)
+
+# Assert all the remaining data has positive density
+all(positive_density_model_label > 0)
+```
+
+First BRT attempt
+
+```{r}
+# Construction of the dcgMatrix object for the dataset
+
+dmatrix_positive_model <- xgb.DMatrix(
+  data = as.matrix(positive_density_model_data),
+  label = positive_density_model_label)
+```
+
+params definition
+
+```{r}
+params_positive_model <- list(
+  booster = "gbtree",
+  objective = "reg:squarederror", # Utilisez "reg:squarederror" pour la régression
+  eta = 0.05,
+  gamma = 0.1,
+  max_depth = 6,
+  min_child_weight = 3,
+  subsample = 0.75,
+  colsample_bytree = 1
+)
+```
+
+training the model
+
+```{r}
+cv.nfold <- 5 # Nombre de plis pour la validation croisée
+nrounds <- 200 # Nombre d'itérations de boosting
+
+cv_results_positive_model <- xgb.cv(
+  params = params_positive_model,
+  data = dmatrix_positive_model,
+  label = labels,
+  nfold = cv.nfold,
+  nrounds = nrounds,
+  metrics = "rmse", # Utiliser "error" pour la classification, "rmse" pour la régression, etc.
+  early_stopping_rounds = 15, # arrêt précoce
+  stratified = TRUE, # si la classification, pour garder la même proportion de classes dans chaque pli
+  seed = 123 # pour la reproductibilité
+)
+```
+
+Afficahge des résultats
+
+```{r}
+print(cv_results_positive_model$evaluation_log)
+```
+
+Trying something visual
+
+```{r}
+model_final <- xgb.train(
+  params = params_positive_model,
+  data = dmatrix_positive_model,
+  nrounds = 200, # Supposons que vous avez choisi le nombre optimal de rounds basé sur xgb.cv
+  watchlist = list(eval = dmatrix_positive_model, train = dmatrix_positive_model),
+  early_stopping_rounds = 15
+)
+
+# Prédire en utilisant le modèle final
+predictions_final <- predict(model_final, as.matrix(positive_density_model_data))
+```
+
+Onto the visual thing :
+
+```{r}
+# Créer un dataframe avec les prédictions et les valeurs réelles
+results_df <- data.frame(
+  Real_Density = positive_density_model_label,
+  Predicted_Density = predictions_final
+)
+
+# Afficher les premières lignes du dataframe pour vérification
+head(results_df)
+```
