@@ -14,19 +14,19 @@ Ballbla
 set.seed(123) # For reproductibility
 
 # Let's reset numeric_data here just in case it has been modified somewhere else
-final_data = data_merlan %>% select_if(is.numeric)
+logistic_data = data_merlan %>% select_if(is.numeric)
 
 # Remove the Year and Month columns
-final_data = final_data %>% select(-c(Surface,Abundance))
+logistic_data = logistic_data %>% select(-c(Surface,Abundance))
 
 # Do not forget to extract Desnity from the dataset
-final_data_label = unlist(final_data$Density)
-# Transformation pour le 
-final_data_label_binary = ifelse(test = final_data_label==0,0,1)
-final_data_label_binary = as.factor(final_data_label_binary)
+logistic_data_label = unlist(logistic_data$Density)
+# Transforming the density into a binary variable
+logistic_data_label_binary = ifelse(test = logistic_data_label==0,0,1)
+# logistic_data_label_binary = as.factor(logistic_data_label_binary)
 
 # Supress Density from the explanatory variables
-final_data = final_data %>% select(-Density)
+logistic_data = logistic_data %>% select(-Density)
 ```
 
 Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
@@ -34,7 +34,7 @@ Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
 ```{r}
 # Construction of the dcgMatrix object for the dataset
 
-dmatrix <- xgb.DMatrix(data = as.matrix(final_data), label = final_data_label_binary)
+dmatrix_logistic <- xgb.DMatrix(data = as.matrix(logistic_data), label = logistic_data_label_binary)
 ```
 
 On définit les paramètres du modèle :
@@ -55,12 +55,11 @@ Et maintenant on lance la validation croisée
 
 ```{r}
 cv.nfold <- 5 # Nombre de plis pour la validation croisée
-nrounds <- 100 # Nombre d'itérations de boosting
+nrounds <- 200 # Nombre d'itérations de boosting
 
 cv_results <- xgb.cv(
   params = params,
-  data = dmatrix,
-  label = labels,
+  data = dmatrix_logistic,
   nfold = cv.nfold,
   nrounds = nrounds,
   metrics = "rmse", # Utiliser "error" pour la classification, "rmse" pour la régression, etc.
@@ -99,13 +98,13 @@ control <- trainControl(method = "cv", number = 5, search = "grid")
 Entraînement du modèle (Attention ce code est très long (env. 1h d'éxécution))
 
 ```{r}
-xgb_model <- train(
-  final_data,
-  final_data_label_binary,
-  trControl = control,
-  tuneGrid = grid,
-  method = "xgbTree"
-)
+# xgb_model <- train(
+#   logistic_data,
+#   logistic_data_label_binary,
+#   trControl = control,
+#   tuneGrid = grid,
+#   method = "xgbTree"
+# )
 ```
 
 Showing the best model :
@@ -129,6 +128,35 @@ colsample_bytree = 1
 min_child_weight = 3
 
 subsample = 0.75
+
+------------------------------------------------------------------------
+
+Let's create such a model, starting with the parameters grid
+
+```{r}
+params_logistic_model <- list(
+  booster = "gbtree",
+  objective = "binary:logistic", # Utilisez "reg:squarederror" pour la régression
+  eta = 0.05,
+  gamma = 0.1,
+  max_depth = 6,
+  min_child_weight = 3,
+  subsample = 0.75,
+  colsample_bytree = 1
+)
+```
+
+Training the actual logistic model for presence/absence
+
+```{r}
+logistic_model <- xgb.train(
+  params = params_logistic_model,
+  data = dmatrix_logistic,
+  nrounds = 200, # Supposons que vous avez choisi le nombre optimal de rounds basé sur xgb.cv
+  # watchlist = list(eval = dmatrix_positive_model, train = dmatrix_positive_model),
+  # early_stopping_rounds = 15
+)
+```
 
 Now onto the positive density model (second part of the delta model)
 
@@ -177,7 +205,7 @@ params_positive_model <- list(
 )
 ```
 
-training the model
+Cross-Validation
 
 ```{r}
 cv.nfold <- 5 # Nombre de plis pour la validation croisée
@@ -186,7 +214,6 @@ nrounds <- 200 # Nombre d'itérations de boosting
 cv_results_positive_model <- xgb.cv(
   params = params_positive_model,
   data = dmatrix_positive_model,
-  label = labels,
   nfold = cv.nfold,
   nrounds = nrounds,
   metrics = "rmse", # Utiliser "error" pour la classification, "rmse" pour la régression, etc.
@@ -196,7 +223,7 @@ cv_results_positive_model <- xgb.cv(
 )
 ```
 
-Afficahge des résultats
+Showing the results
 
 ```{r}
 print(cv_results_positive_model$evaluation_log)
@@ -205,7 +232,7 @@ print(cv_results_positive_model$evaluation_log)
 Trying something visual
 
 ```{r}
-model_final <- xgb.train(
+positive_model <- xgb.train(
   params = params_positive_model,
   data = dmatrix_positive_model,
   nrounds = 200, # Supposons que vous avez choisi le nombre optimal de rounds basé sur xgb.cv
@@ -214,7 +241,7 @@ model_final <- xgb.train(
 )
 
 # Prédire en utilisant le modèle final
-predictions_final <- predict(model_final, as.matrix(positive_density_model_data))
+predictions_positive <- predict(positive_model, as.matrix(positive_density_model_data))
 ```
 
 Onto the visual thing :
@@ -223,9 +250,169 @@ Onto the visual thing :
 # Créer un dataframe avec les prédictions et les valeurs réelles
 results_df <- data.frame(
   Real_Density = positive_density_model_label,
-  Predicted_Density = predictions_final
+  Predicted_Density = predictions_positive
 )
 
 # Afficher les premières lignes du dataframe pour vérification
 head(results_df)
+```
+
+Creating the delta model !
+
+```{r}
+train_delta_model <- function(data, target){
+  library(xgboost)
+  library(dplyr)
+  
+  # Ensure the target column is a character string
+  # target <- deparse(substitute(target))
+  
+  # Selecting only the numeric variables and removing the target column for the logistic model
+  numeric_data <- data %>%
+    select_if(is.numeric) %>%
+    select(-all_of(target))
+  
+  # Creating the target for the logistic model
+  logistic_target <- ifelse(test = data[[target]]==0, 0, 1)
+  
+  # Creating the dataset for the Presence/Absence model, ensuring 'Density' is excluded
+  positive_data <- data %>% 
+    filter(!!as.name(target) > 0) %>% 
+    select_if(is.numeric) %>%
+    select(-all_of(target))
+  
+  # Creating the positive target
+  positive_target <- data %>% 
+    filter(!!as.name(target) > 0) %>% 
+    pull(!!as.name(target))
+  
+  # Defining the dmatrix object for xgb.train method for the logistic model
+  dmatrix_logistic <- xgb.DMatrix(
+    data = as.matrix(numeric_data),
+    label = logistic_target
+  )
+  
+  # Defining the parameters for the logistic model
+  params_logistic <- list(
+    booster = "gbtree",
+    objective = "binary:logistic",
+    eta = 0.05,
+    gamma = 0.1,
+    max_depth = 6,
+    min_child_weight = 3,
+    subsample = 0.75,
+    colsample_bytree = 1
+  )
+  
+  # Training the logistic model
+  logistic_model <- xgb.train(
+    params = params_logistic,
+    data = dmatrix_logistic,
+    nrounds = 200
+  )
+  
+  # Parameters for the positive model
+  params_positive <- list(
+    booster = "gbtree",
+    objective = "reg:squarederror",
+    eta = 0.05,
+    gamma = 0.1,
+    max_depth = 6,
+    min_child_weight = 3,
+    subsample = 0.75,
+    colsample_bytree = 1
+  )
+  
+  print(names(positive_data))
+  # Defining the dmatrix object for xgb.train method for the positive model
+  dmatrix_positive <- xgb.DMatrix(
+    data = as.matrix(positive_data),
+    label = positive_target
+  )
+  
+  # Training the positive model
+  positive_model <- xgb.train(
+    params = params_positive,
+    data = dmatrix_positive,
+    nrounds = 200
+  )
+  
+  # Include the feature names in the return object
+  model_features <- names(numeric_data)
+  
+  # Return both models
+  return(
+    list(
+      logistic_model = logistic_model,
+      positive_model = positive_model,
+      features = model_features
+    )
+  )
+}
+```
+
+Now, let's create the **`predict_delta_model`** function. This function will accept a trained model (from **`train_delta_model`**) and new data to make predictions:
+
+```{r}
+predict_delta_model <- function(model, newdata) {
+  library(xgboost)
+  library(dplyr)
+  
+  # Use the features stored in the model object
+  model_features <- model$features
+  
+  # Ensure newdata contains only the features used during training
+  newdata_numeric <- newdata %>% 
+    select(all_of(model_features)) # Use model_features to select features
+  
+  # DMatrix object for the prediction
+  dmatrix_newdata <- xgb.DMatrix(data = as.matrix(newdata_numeric))
+
+  # Predict presence/absence using the logistic model
+  presence_probabilities <- predict(model$logistic_model, dmatrix_newdata)
+  
+  # Initialize predictions vector
+  final_predictions <- rep(0, nrow(newdata))
+  
+  # Predict with the positive model where presence is likely
+  positive_indices <- which(presence_probabilities > 0.5)
+  if (length(positive_indices) > 0) {
+    # Ensure feature selection for positive prediction matches training
+    positive_newdata <- newdata_numeric[positive_indices, , drop = FALSE]
+    print(names(positive_newdata))
+    dmatrix_positive_newdata <- xgb.DMatrix(data = as.matrix(positive_newdata))
+    positive_predictions <- predict(model$positive_model, dmatrix_positive_newdata)
+    final_predictions[positive_indices] <- positive_predictions
+  }
+  
+  return(final_predictions)
+}
+
+```
+
+```{r}
+set.seed(123) # For reproductibility
+
+# Remove the Year and Month columns
+model_data = data_merlan %>% select(-c(Surface,Abundance))
+
+delta_model <- train_delta_model(
+  data = model_data,
+  target = "Density"
+)
+
+prediction_data = model_data %>% select(-Density)
+
+predictions_delta_model <- predict_delta_model(
+  model = delta_model,
+  newdata = prediction_data
+)
+```
+
+Just to visualize :
+
+```{r}
+df = cbind(data_merlan$Density,predictions_delta_model)
+
+View(df)
 ```
