@@ -576,8 +576,11 @@ library(ggplot2)
 ```
 
 ```{r}
+# Filtrer les données pour inclure uniquement les valeurs entre 150 et 200
+df_filtered <- df[df$V1 >= 0 & df$V1 <= 150,]
+
 # create a graphe with ggplot2
-graphique <- ggplot(df, aes(x = V1, y = predictions_delta_model)) +
+graphique <- ggplot(df_filtered, aes(x = V1, y = predictions_delta_model)) +
   geom_point(shape = 4, color = "darkblue") +  
   geom_abline(intercept = 0, slope = 1, color = "lightblue", linetype = "dashed") +  
   labs(x = "Valeurs observées", y = "Prédictions") +  
