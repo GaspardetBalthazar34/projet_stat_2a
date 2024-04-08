@@ -1,14 +1,15 @@
 # Modèle delta
 
-```{r}
+```{r results="hide"}
 # On charge les librairies
+requiredPackages = c("xgboost", "caret", "dplyr")
 
-require(xgboost)
-require(caret)
-require(dplyr)
+for(pkge in requiredPackages) {
+if (!require(pkge, character.only = TRUE))
+install.packages(pkge)
+library(pkge, character.only = TRUE)
+}
 ```
-
-Ballbla
 
 # MODELE BINOMIAL
 
@@ -212,14 +213,11 @@ logistic_model <- xgb.train(
 predictions_positive <- predict(positive_model, as.matrix(positive_density_model_data))
 ```
 
-
-
 ```         
         A FAIRE : 
         - afficher erreur du modèle binomial (s'inspirer de celui à densité) 
    
 ```
-
 
 # MDELE DENSITE POSITIVE
 
@@ -400,7 +398,7 @@ rmse_dens_pos
 Creating the delta model !
 
 ```{r}
-train_delta_model <- function(data, target){
+train_delta_model <- function(data, target, save_model = FALSE, model_name = "delta_model"){
   library(xgboost)
   library(dplyr)
   
@@ -463,7 +461,6 @@ train_delta_model <- function(data, target){
     colsample_bytree = 1
   )
   
-  print(names(positive_data))
   # Defining the dmatrix object for xgb.train method for the positive model
   dmatrix_positive <- xgb.DMatrix(
     data = as.matrix(positive_data),
@@ -480,6 +477,17 @@ train_delta_model <- function(data, target){
   # Include the feature names in the return object
   model_features <- names(numeric_data)
   
+  if(save_model == TRUE){
+    saveRDS(
+      list(
+        logistic_model = logistic_model,
+        positive_model = positive_model,
+        features = model_features
+      ),
+      paste0("../Models/", model_name, ".rds")
+    )
+  }
+  
   # Return both models
   return(
     list(
@@ -491,7 +499,7 @@ train_delta_model <- function(data, target){
 }
 ```
 
-Now, let's create the **`predict_delta_model`** function. This function will accept a trained model (from **`train_delta_model`**) and new data to make predictions:
+Now, let's create the **`predict_delta`**saveRDS( list(**`_model`** function. This function will accept a trained model (from **`train_delta_model`**) and new data to make predictions:
 
 ```{r}
 predict_delta_model <- function(model, newdata) {
@@ -519,7 +527,6 @@ predict_delta_model <- function(model, newdata) {
   if (length(positive_indices) > 0) {
     # Ensure feature selection for positive prediction matches training
     positive_newdata <- newdata_numeric[positive_indices, , drop = FALSE]
-    print(names(positive_newdata))
     dmatrix_positive_newdata <- xgb.DMatrix(data = as.matrix(positive_newdata))
     positive_predictions <- predict(model$positive_model, dmatrix_positive_newdata)
     final_predictions[positive_indices] <- positive_predictions
@@ -533,12 +540,13 @@ predict_delta_model <- function(model, newdata) {
 ```{r}
 set.seed(123) # For reproductibility
 
-# Remove the Year and Month columns
+# Remove the Surface and Abundance columns
 model_data = data_merlan %>% select(-c(Surface,Abundance))
 
 delta_model <- train_delta_model(
   data = model_data,
-  target = "Density"
+  target = "Density",
+  save_model = TRUE
 )
 
 prediction_data = model_data %>% select(-Density)
@@ -583,5 +591,5 @@ print(graphique)
 ```{r}
 rmse_mod_delta <- sqrt(mean(df$V1 - df$predictions_delta_model)^2)
 
-rmse_mod_delta
+(rmse_mod_delta*100)/range(diff(df$V1))
 ```

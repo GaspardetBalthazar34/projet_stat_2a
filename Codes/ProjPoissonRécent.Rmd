@@ -10,18 +10,15 @@ editor_options:
 
 ## Packages et Librairie
 
-```{r}
+```{r results="hide"}
+# On charge les librairies
+requiredPackages = c("xgboost", "caret", "dplyr", "corrplot", "ggplot2", "caret", "Ckmeans.1d.dp", "DiagrammeR")
 
-
-if (!require("ggplot2")) install.packages("ggplot2")
-if (!require("dplyr")) install.packages("dplyr")
-if (!require("corrplot")) install.packages("corrplot")
-```
-
-```{r}
-library(dplyr)
-library(ggplot2)
-library(corrplot)
+for(pkge in requiredPackages) {
+if (!require(pkge, character.only = TRUE))
+install.packages(pkge)
+library(pkge, character.only = TRUE)
+}
 ```
 
 ```{r}
