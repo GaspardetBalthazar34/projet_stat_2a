@@ -10,6 +10,10 @@ require(dplyr)
 
 Ballbla
 
+# MODELE BINOMIAL
+
+## Traitement de la variable Density
+
 ```{r}
 set.seed(123) # For reproductibility
 
@@ -29,6 +33,8 @@ logistic_data_label_binary = ifelse(test = logistic_data_label==0,0,1)
 logistic_data = logistic_data %>% select(-Density)
 ```
 
+## BRT
+
 Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
 
 ```{r}
@@ -36,6 +42,8 @@ Creating the `dcgMatrix` for the boosted regression tree method `xgboost`
 
 dmatrix_logistic <- xgb.DMatrix(data = as.matrix(logistic_data), label = logistic_data_label_binary)
 ```
+
+### Hyperparamètres
 
 On définit les paramètres du modèle :
 
@@ -50,6 +58,8 @@ params <- list(
   colsample_bytree = 1
 )
 ```
+
+#### Validation croisée
 
 Et maintenant on lance la validation croisée
 
@@ -75,6 +85,44 @@ Affichage des résultats
 print(cv_results$evaluation_log)
 ```
 
+```{r}
+df_rmse_binom <- data.frame(cv_results$evaluation_log)
+```
+
+```{r}
+par(mfrow=c(1,2))
+
+
+# Graphe of the Decrease of the RMSE
+graph_rmse_binom_mean <- ggplot(df_rmse_binom, aes(x = iter, y = test_rmse_mean)) +
+  geom_line(color = "darkblue") +  
+  labs(x = "Nombre d'itérations", y = "RMSE") +  
+  ggtitle("Décroissance de la RMSE en fonction des itérations (échantillon de test)") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+graph_rmse_binom_mean
+
+
+# -----------------------------------
+
+
+# Graphe of the Decrease of the std's RMSE
+graph_rmse_binom_std <- ggplot(df_rmse_binom, aes(x = iter, y = test_rmse_std)) +
+  geom_line(color = "darkblue") +  
+  labs(x = "Nombre d'itérations", y = "RMSE") +  
+  ggtitle("Ecart-type de la RMSE en fonction des itérations (échantillon de test") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+graph_rmse_binom_std
+
+par(mfrow=c(1,1))
+
+```
+
+#### Opti des hyperparam
+
 Tentative d'optimisation des paramètres :
 
 ```{r}
@@ -94,6 +142,8 @@ Configuration du contrôle de la formation
 ```{r}
 control <- trainControl(method = "cv", number = 5, search = "grid")
 ```
+
+### Entrainement du BRT
 
 Entraînement du modèle (Attention ce code est très long (env. 1h d'éxécution))
 
@@ -131,6 +181,8 @@ subsample = 0.75
 
 ------------------------------------------------------------------------
 
+## Modèle binom avec best hyperparam
+
 Let's create such a model, starting with the parameters grid
 
 ```{r}
@@ -156,9 +208,24 @@ logistic_model <- xgb.train(
   # watchlist = list(eval = dmatrix_positive_model, train = dmatrix_positive_model),
   # early_stopping_rounds = 15
 )
+
+predictions_positive <- predict(positive_model, as.matrix(positive_density_model_data))
 ```
 
+
+
+```         
+        A FAIRE : 
+        - afficher erreur du modèle binomial (s'inspirer de celui à densité) 
+   
+```
+
+
+# MDELE DENSITE POSITIVE
+
 Now onto the positive density model (second part of the delta model)
+
+## Traitement de la variable Density
 
 ```{r}
 # data for the positive density model
@@ -179,6 +246,8 @@ positive_density_model_data = positive_density_model_data %>%
 # Assert all the remaining data has positive density
 all(positive_density_model_label > 0)
 ```
+
+## Premier modèle
 
 First BRT attempt
 
@@ -205,6 +274,8 @@ params_positive_model <- list(
 )
 ```
 
+### Validation croisée
+
 Cross-Validation
 
 ```{r}
@@ -223,10 +294,54 @@ cv_results_positive_model <- xgb.cv(
 )
 ```
 
-Showing the results
+Showing the results of the rmse of the cross-validation :
 
 ```{r}
 print(cv_results_positive_model$evaluation_log)
+```
+
+```{r}
+df_rmse_density <- data.frame(cv_results_positive_model$evaluation_log)
+```
+
+```{r}
+par(mfrow=c(1,2))
+
+
+# Graphe of the Decrease of the RMSE
+graph_rmse_dens_mean <- ggplot(df_rmse_density, aes(x = iter, y = test_rmse_mean)) +
+  geom_line(color = "darkblue") +  
+  labs(x = "Nombre d'itérations", y = "RMSE") +  
+  ggtitle("Décroissance de la RMSE en fonction des itérations (échantillon de test)") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+graph_rmse_dens_mean
+
+
+# -----------------------------------
+
+
+# Graphe of the Decrease of the std's RMSE
+graph_rmse_dens_std <- ggplot(df_rmse_density, aes(x = iter, y = test_rmse_std)) +
+  geom_line(color = "darkblue") +  
+  labs(x = "Nombre d'itérations", y = "RMSE") +  
+  ggtitle("Ecart-type de la RMSE en fonction des itérations (échantillon de test") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+graph_rmse_dens_std
+
+par(mfrow=c(1,1))
+
+```
+
+### Erreur du modèle à densité positive
+
+Error visualisation:
+
+```{r}
+library(ggplot2)
 ```
 
 Trying something visual
@@ -256,6 +371,31 @@ results_df <- data.frame(
 # Afficher les premières lignes du dataframe pour vérification
 head(results_df)
 ```
+
+```{r}
+# create a graphe with ggplot2
+graphique <- ggplot(results_df, aes(x = results_df$Real_Density, y = results_df$Predicted_Density)) +
+  geom_point(shape = 4, color = "lightblue") +  
+  geom_abline(intercept = 0, slope = 1, color = "blue", linetype = "dashed") +  
+  labs(x = "Valeurs observées", y = "Prédictions") +  
+  ggtitle("Comparaison des valeurs observées et des prédictions") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+print(graphique)
+```
+
+Error positiv density model
+
+```{r}
+rmse_dens_pos <- sqrt(mean(results_df$Real_Density - results_df$Predicted_Density)^2)
+
+rmse_dens_pos
+```
+
+# MODELE DELTA
+
+## Functions !
 
 Creating the delta model !
 
@@ -409,10 +549,39 @@ predictions_delta_model <- predict_delta_model(
 )
 ```
 
+## Visualization
+
 Just to visualize :
 
 ```{r}
 df = cbind(data_merlan$Density,predictions_delta_model)
 
+# Transform df in a real df 
+df <- data.frame(df)
 View(df)
+```
+
+Error visualisation:
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+# create a graphe with ggplot2
+graphique <- ggplot(df, aes(x = V1, y = predictions_delta_model)) +
+  geom_point(shape = 4, color = "darkblue") +  
+  geom_abline(intercept = 0, slope = 1, color = "lightblue", linetype = "dashed") +  
+  labs(x = "Valeurs observées", y = "Prédictions") +  
+  ggtitle("Comparaison des valeurs observées et des prédictions") +  
+  theme_minimal()  # Thème minimal
+
+# Afficher le graphique
+print(graphique)
+```
+
+```{r}
+rmse_mod_delta <- sqrt(mean(df$V1 - df$predictions_delta_model)^2)
+
+rmse_mod_delta
 ```
