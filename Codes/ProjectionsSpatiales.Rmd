@@ -1,0 +1,247 @@
+# Script pour les projections spatiales
+
+Let's start by loading the delta model previously trained
+
+```{r}
+# Loading delta model
+
+delta_model <- readRDS("../Models/delta_model.rds")
+```
+
+DS
+
+```{r}
+predicted_values <- predict(delta_model$positive_model, as.matrix(prepared_data), type = "response")
+summary(predicted_values)
+```
+
+d
+
+```{r}
+year = 1993:2021
+Raster_stack <- stack()
+# Vous devez ajuster ce chemin selon votre structure de fichiers
+path_to_environment <- "../Donnees/"
+
+for(Date in year){
+  env_files <- list.files(path_to_environment, pattern = paste0(Date, "\\.gri"), full.names = TRUE)
+  print(env_files)
+  if(length(env_files) > 0){
+    Current_env <- stack(env_files)
+    Current_env_model <- as.data.frame(Current_env, xy = TRUE)
+    
+    # Préparation des données selon les besoins de votre modèle
+    # Cette étape peut inclure la normalisation, la sélection de variables, etc.
+    prepared_data <- Current_env_model %>%
+      dplyr::select(delta_model$features)
+    
+    # Prédiction avec le modèle Delta
+    presence_prob <- predict(delta_model$logistic_model, as.matrix(prepared_data), type = "response")
+    density <- ifelse(presence_prob > 0.5, exp(predict(delta_model$positive_model, as.matrix(prepared_data))), 0)
+    
+    # Création du raster de densité pour l'année courante
+    density_raster <- rasterFromXYZ(data.frame(x = Current_env_model$x, y = Current_env_model$y, layer = density))
+    names(density_raster) <- as.character(Date)
+    Raster_stack <- stack(Raster_stack, density_raster)
+  }
+}
+```
+
+AD
+
+```{r}
+test = as.data.frame(stack("../Donnees/Environment_2003.gri"),xy = TRUE)
+```
+
+DA
+
+```{r}
+test = na.omit(test)
+```
+
+dazdazd
+
+```{r}
+library(raster)
+library(dplyr)
+
+# Présume que 'path_to_data_tidy' est défini et pointe vers l'emplacement correct de vos données.
+path_to_environment <- paste0("../Donnees/")
+
+# Créez une pile de raster vide que vous remplirez avec des prédictions
+Raster_stack <- stack()
+years <- 1993:2021
+
+# Bouclez sur chaque année
+for (Date in years) {
+  # Générez le chemin complet vers les fichiers pour l'année actuelle
+  env_files <- list.files(path_to_environment, pattern = paste0(Date, "\\.gri$"), full.names = TRUE)
+  
+  # Si des fichiers pour l'année sont trouvés, continuez
+  if (length(env_files) > 0) {
+    # Chargez les données environnementales comme un raster stack
+    env_raster_stack <- stack(env_files)
+    
+    # Convertissez les données raster en data.frame pour la prédiction
+    env_data <- as.data.frame(env_raster_stack, xy = TRUE)
+    
+    # Vous pouvez convertir certaines colonnes en facteurs si nécessaire, selon votre modèle
+    env_data = na.omit(env_data)
+
+    # Faites des prédictions en utilisant votre modèle sur les données environnementales
+    predicted_densities <- predict_delta_model(model = votre_modele, newdata = env_data)
+    
+    # Créez un raster de densité prédit à partir des valeurs prédites
+    predicted_density_raster <- rasterFromXYZ(cbind(env_data[, 1:2], est.dens = predicted_densities))
+    
+    # Nommez le raster avec l'année correspondante et ajoutez-le à la pile de rasters
+    names(predicted_density_raster) <- as.character(Date)
+    Raster_stack <- stack(Raster_stack, predicted_density_raster)
+  }
+}
+
+# À ce stade, Raster_stack contient un raster pour les prédictions de chaque année disponible
+```
+
+checking with summary
+
+```{r}
+summary(Raster_stack)
+```
+
+Other plot
+
+```{r}
+library(ggplot2)
+library(raster)
+
+# Supposons que 'Raster_map' est le raster que vous voulez visualiser
+Raster_map <- Raster_stack[[1]]  # Remplacer par le raster approprié
+
+# Convertissez le raster en un dataframe pour ggplot2
+df_raster <- as.data.frame(rasterToPoints(Raster_map))
+
+ggplot() +
+  geom_raster(data = df_raster, aes(x = x, y = y, fill = layer)) +
+  scale_fill_viridis_c() +
+  labs(title = paste("Densité en", names(Raster_map))) +
+  theme_minimal() +
+  coord_fixed()
+```
+
+```{r}
+# Vérification des valeurs prédites
+summary(df_raster$layer)
+```
+
+Vizualisation
+
+```{r}
+# plotting a specific year
+
+plot(Raster_stack[[15]], main = paste("Densité en", names(Raster_stack)[15]))
+```
+
+Saving the results
+
+```{r}
+# stack raster save
+
+writeRaster(Raster_stack, "path_to_save/projected_density.grd", format = "GTiff", overwrite = TRUE)
+```
+
+# Second test
+
+Loading
+
+```{r}
+library(raster)
+
+# Initialiser une liste pour stocker les données de chaque année
+environment_data_list <- list()
+
+for(year in 1993:2021) {
+  file_path <- sprintf("../Donnees/Environment_%04d.gri", year)
+  environment_data <- stack(file_path)
+  environment_data_list[[as.character(year)]] <- environment_data
+}
+```
+
+Preparing the data for the model
+
+```{r}
+# Charger les variables du modèle
+model_features <- readRDS("../Models/delta_model.rds")$features
+
+# Sélectionner les variables nécessaires et nettoyer les données
+library(dplyr)
+
+cleaned_data_list <- lapply(environment_data_list, function(data) {
+  # Convertir le raster en data frame
+  data_df <- as.data.frame(data, xy = TRUE)
+
+  # Sélectionner uniquement les colonnes nécessaires pour le modèle
+  selected_data <- data_df[, c("x", "y", model_features)]
+
+  # Enlever les lignes contenant des valeurs NA dans les colonnes qui   intéressent le modèle
+  clean_data <- na.omit(selected_data)
+  
+  return(clean_data)
+})
+```
+
+Make predictions
+
+```{r}
+## Charger le modèle
+delta_model <- readRDS("../Models/delta_model.rds")
+
+# Faire des prédictions pour chaque tableau
+predictions_list <- lapply(cleaned_data_list, function(data) {
+  # Création d'un dataset sans les colonnes x, y pour la prédiction
+  prediction_data <- data %>%
+    select(-x, -y)  # Utilisation de select pour retirer x et y
+  
+  # Faire des prédictions
+  predicted_density <- predict_delta_model(
+    delta_model,
+    newdata = prediction_data
+    )
+  
+  # Ajouter les prédictions comme une nouvelle colonne au dataset original
+  data$predicted_density <- predicted_density
+  return(data)
+})
+```
+
+Projection
+
+```{r}
+library(ggplot2)
+
+# Exemple pour une année spécifique, par exemple 2021
+data_to_plot <- predictions_list[["2003"]]
+
+ggplot(data_to_plot, aes(x = x, y = y, fill = predicted_density)) +
+  geom_tile() + 
+  scale_fill_gradient(low = "blue", high = "red", name = "Fish Density") +
+  coord_fixed() +
+  labs(title = "Fish Density Map 2003", x = "Longitude", y = "Latitude") +
+  theme_minimal()
+```
+
+Rescaling to get more small values
+
+```{r}
+ggplot(data_to_plot, aes(x = x, y = y, fill = predicted_density)) +
+  geom_tile() + 
+  scale_fill_gradientn(
+    colors = c("blue", "cyan", "green", "yellow", "red"),
+    values = scales::rescale(c(0, 0.1, 0.2, 0.5, 1)),
+    limits = c(min(data_to_plot$predicted_density, na.rm = TRUE), max(data_to_plot$predicted_density, na.rm = TRUE)),
+    name = "Fish Density"
+  ) +
+  coord_fixed() +
+  labs(title = "Fish Density Map 2021", x = "Longitude", y = "Latitude") +
+  theme_minimal()
+```

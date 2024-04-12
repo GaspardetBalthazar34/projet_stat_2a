@@ -534,7 +534,6 @@ predict_delta_model <- function(model, newdata) {
   
   return(final_predictions)
 }
-
 ```
 
 ```{r}
