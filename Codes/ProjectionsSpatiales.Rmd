@@ -284,6 +284,6 @@ for(year in 1993:2021){
     ) +
     theme(panel.spacing = unit(0, "lines"))  # Réduire l'espacement autour de la carte
   
-  ggsave(paste0("../Outputs/fish_density_map_",year,".png"), plot = dernier_plot, width = 10, height = 8, dpi = 300)
+  ggsave(paste0("../Outputs/fish_density_map_",year,".png"), plot = dernier_plot, width = 10, height = 8, dpi = 1200)
 }
 ```
