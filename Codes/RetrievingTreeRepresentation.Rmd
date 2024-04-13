@@ -1,0 +1,40 @@
+# Retrieving Tree Representation from both models inside the delta model
+
+```{r}
+output_dir <- "../Outputs/Trees/"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+```
+
+Saving last tree from logistic model
+
+```{r}
+# Préparation du graphique pour l'arbre spécifique
+gr_logistic <- xgb.plot.tree(model = delta_model$logistic_model,
+                             trees = 198,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
+                             plot_width = 2400,
+                             plot_height = 3600,
+                             render = FALSE,
+                             feature_names = delta_model$features  # Exclure la colonne cible si elle est incluse
+                            )
+
+# Enregistrement du graphique dans un fichier
+export_graph(gr_logistic, '../Outputs/Trees/logistic_model_tree.png', width = 2400, height = 3600)
+```
+
+Saving last tree from positive mode
+
+```{r}
+# Préparation du graphique pour l'arbre spécifique
+gr_positive <- xgb.plot.tree(model = delta_model$positive_model,
+                             trees = 198,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
+                             plot_width = 2400,
+                             plot_height = 3600,
+                             render = FALSE,
+                             feature_names = colnames(train_data[-which(names(train_data) == "Density")])  # Exclure la colonne cible si elle est incluse
+                            )
+
+# Enregistrement du graphique dans un fichier
+export_graph(gr_positive, '../Outputs/Trees/positive_model_tree.png', width = 2400, height = 3600)
+```
