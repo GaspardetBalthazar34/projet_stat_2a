@@ -1,0 +1,109 @@
+# Comparing 2 types of error metrics
+
+MAE vs RMSE
+
+```{r}
+library(caret)
+library(dplyr)
+library(Metrics)
+
+set.seed(123) # Pour la reproductibilité
+
+# Préparer les données (s'assurer que `data_merlan` est ton DataFrame)
+model_data <- data_merlan %>% select(-c(Surface, Abundance))
+
+# Importer le modèle delta
+delta_model <- readRDS("../Models/delta_model.rds")
+
+folds <- createFolds(model_data$Density, k = 10) # Création des plis
+
+# Fonction pour la validation croisée et le calcul des métriques
+cross_val <- function(train_index, test_index, data, delta_model) {
+  train_data <- data[train_index, ]
+  test_data <- data[test_index, ]
+  
+  # Vraies valeurs
+  true_values <- test_data$Density
+  
+  # Entraînement du modèle sur le sous-ensemble d'apprentissage
+  trained_model <- train_delta_model(train_data, "Density")
+  
+  # Prédictions sur l'ensemble de test
+  predictions <- predict_delta_model(trained_model, test_data %>% select(-Density))
+  
+  # Calcul des métriques
+  rmse_val <- rmse(true_values, predictions)
+  mae_val <- mae(true_values, predictions)
+  
+  # Renvoyer les métriques
+  return(list(RMSE = rmse_val, MAE = mae_val))
+}
+
+# Appliquer la validation croisée et calculer les erreurs
+errors <- lapply(seq_along(folds), function(i) {
+  train_index <- folds[[i]]
+  test_index <- setdiff(seq_len(nrow(model_data)), train_index)
+  cross_val(train_index, test_index, model_data, delta_model)
+})
+
+# Calculer la moyenne des erreurs
+mean_rmse <- mean(sapply(errors, `[[`, "RMSE"))
+mean_mae <- mean(sapply(errors, `[[`, "MAE"))
+
+# Afficher les résultats
+print(paste("RMSE moyen:", mean_rmse))
+print(paste("MAE moyen:", mean_mae))
+
+# Répéter pour les données non-zéro
+non_zero_data <- subset(model_data, Density > 0)
+non_zero_folds <- createFolds(non_zero_data$Density, k = 10)
+non_zero_errors <- lapply(seq_along(non_zero_folds), function(i) {
+  train_index <- non_zero_folds[[i]]
+  test_index <- setdiff(seq_len(nrow(non_zero_data)), train_index)
+  cross_val(train_index, test_index, non_zero_data, delta_model)
+})
+
+mean_rmse_non_zero <- mean(sapply(non_zero_errors, `[[`, "RMSE"))
+mean_mae_non_zero <- mean(sapply(non_zero_errors, `[[`, "MAE"))
+
+# Afficher les résultats pour les données non-zéro
+print(paste("RMSE moyen (non-zéro):", mean_rmse_non_zero))
+print(paste("MAE moyen (non-zéro):", mean_mae_non_zero))
+```
+
+A version to compute with range
+
+```{r}
+# Calcul de la plage des valeurs de densité
+range_density <- range(model_data$Density, na.rm = TRUE)
+range_density_value <- range_density[2] - range_density[1]
+
+# CVRMSE et Coefficient de Variation de la MAE (CVMAE)
+cvrmse <- mean_rmse / range_density_value
+cvmae <- mean_mae / range_density_value
+
+print(paste("CVRMSE:", cvrmse))
+print(paste("CVMAE:", cvmae))
+
+# Calculs similaires pour les données non-zéro
+range_density_non_zero <- range(non_zero_data$Density, na.rm = TRUE)
+range_density_non_zero_value <- range_density_non_zero[2] - range_density_non_zero[1]
+
+cvrmse_non_zero <- mean_rmse_non_zero / range_density_non_zero_value
+cvmae_non_zero <- mean_mae_non_zero / range_density_non_zero_value
+
+print(paste("CVRMSE (non-zéro):", cvrmse_non_zero))
+print(paste("CVMAE (non-zéro):", cvmae_non_zero))
+```
+
+-   **CVRMSE de 0.0858**: Cela signifie que la racine de l'erreur quadratique moyenne (RMSE) est équivalente à 8.58% de la plage des valeurs de densité de poissons. En d'autres termes, en moyenne, les erreurs de prévision de ton modèle sont de 8.58% de l'intervalle total entre la plus petite et la plus grande densité observée.
+
+-   **CVMAE de 0.0303**: Ceci indique que l'erreur absolue moyenne (MAE) est équivalente à 3.03% de la plage des valeurs de densité de poissons. Cela signifie que, en moyenne, les erreurs absolues (sans considération de la direction de l'erreur) représentent 3.03% de la plage totale des valeurs observées.
+
+Lorsque tu compares les versions "tout inclus" et "non-zéro", tu peux voir que tant le CVRMSE que le CVMAE sont plus élevés pour les données non nulles. Cela indique que ton modèle a plus de difficultés à prédire les valeurs quand elles ne sont pas nulles, ce qui pourrait être attendu dans des données écologiques où les zéros sont fréquents et où prédire des occurrences (non-zéros) peut être plus difficile que de prédire l'absence (zéros).
+
+-   **CVRMSE (non-zéro) de 0.1380**: Lorsqu'on ne considère que les observations non nulles, la RMSE normalisée augmente à 13.8% de la plage des valeurs observées pour les densités de poissons non nulles.
+
+-   **CVMAE (non-zéro) de 0.0802**: De même, la MAE normalisée pour les observations non nulles est de 8.02% de la plage de densité non nulle.
+
+Ces résultats indiquent que le modèle est relativement bon pour prédire les valeurs y compris les zéros (car le CVRMSE et le CVMAE sont relativement bas), mais il est moins précis lorsqu'il s'agit uniquement des valeurs de densité positives (non-zéros), où les erreurs représentent une plus grande proportion de la plage des valeurs observées. Cela pourrait être un point de départ pour examiner comment le modèle gère les prédictions de faibles densités de poissons et pour explorer des stratégies pour améliorer ces prédictions, telles que le rééquilibrage des données, l'ajustement des paramètres du modèle ou l'utilisation de techniques de modélisation différentes.

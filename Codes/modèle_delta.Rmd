@@ -542,11 +542,13 @@ set.seed(123) # For reproductibility
 # Remove the Surface and Abundance columns
 model_data = data_merlan %>% select(-c(Surface,Abundance))
 
-delta_model <- train_delta_model(
-  data = model_data,
-  target = "Density",
-  save_model = TRUE
-)
+# delta_model <- train_delta_model(
+#   data = model_data,
+#   target = "Density",
+#   save_model = TRUE
+# )
+
+delta_model = readRDS("../Models/delta_model.rds")
 
 prediction_data = model_data %>% select(-Density)
 
@@ -613,5 +615,5 @@ print(graphique)
 ```{r}
 rmse_mod_delta <- sqrt(mean(df$V1 - df$predictions_delta_model)^2)
 
-(rmse_mod_delta*100)/range(diff(df$V1))
+(rmse_mod_delta*100)/diff(range(df$V1))
 ```
