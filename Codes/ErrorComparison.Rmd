@@ -107,3 +107,250 @@ Lorsque tu compares les versions "tout inclus" et "non-zéro", tu peux voir que 
 -   **CVMAE (non-zéro) de 0.0802**: De même, la MAE normalisée pour les observations non nulles est de 8.02% de la plage de densité non nulle.
 
 Ces résultats indiquent que le modèle est relativement bon pour prédire les valeurs y compris les zéros (car le CVRMSE et le CVMAE sont relativement bas), mais il est moins précis lorsqu'il s'agit uniquement des valeurs de densité positives (non-zéros), où les erreurs représentent une plus grande proportion de la plage des valeurs observées. Cela pourrait être un point de départ pour examiner comment le modèle gère les prédictions de faibles densités de poissons et pour explorer des stratégies pour améliorer ces prédictions, telles que le rééquilibrage des données, l'ajustement des paramètres du modèle ou l'utilisation de techniques de modélisation différentes.
+
+------------------------------------------------------------------------
+
+## Positive model post and pre log comaprison
+
+Before doing so we must rebuild the old version of the delta model :\
+
+```{r}
+train_delta_model_old <- function(data, target, save_model = FALSE, model_name = "delta_model_old"){
+  library(xgboost)
+  library(dplyr)
+  
+  # Ensure the target column is a character string
+  # target <- deparse(substitute(target))
+  
+  # Selecting only the numeric variables and removing the target column for the logistic model
+  numeric_data <- data %>%
+    select_if(is.numeric) %>%
+    select(-all_of(target))
+  
+  # Creating the target for the logistic model
+  logistic_target <- ifelse(test = data[[target]]==0, 0, 1)
+  
+  # Creating the dataset for the Presence/Absence model, ensuring 'Density' is excluded
+  positive_data <- data %>% 
+    filter(!!as.name(target) > 0) %>% 
+    select_if(is.numeric) %>%
+    select(-all_of(target))
+  
+  # Creating the positive target
+  positive_target <- data %>% 
+    filter(!!as.name(target) > 0) %>% 
+    pull(!!as.name(target))
+  
+  # Defining the dmatrix object for xgb.train method for the logistic model
+  dmatrix_logistic <- xgb.DMatrix(
+    data = as.matrix(numeric_data),
+    label = logistic_target
+  )
+  
+  # Defining the parameters for the logistic model
+  params_logistic <- list(
+    booster = "gbtree",
+    objective = "binary:logistic",
+    eta = 0.05,
+    gamma = 0.1,
+    max_depth = 6,
+    min_child_weight = 3,
+    subsample = 0.75,
+    colsample_bytree = 1
+  )
+  
+  # Training the logistic model
+  logistic_model <- xgb.train(
+    params = params_logistic,
+    data = dmatrix_logistic,
+    nrounds = 200
+  )
+  
+  # Parameters for the positive model
+  params_positive <- list(
+    booster = "gbtree",
+    objective = "reg:squarederror",
+    eta = 0.05,
+    gamma = 0.1,
+    max_depth = 6,
+    min_child_weight = 3,
+    subsample = 0.75,
+    colsample_bytree = 1
+  )
+  
+  # Defining the dmatrix object for xgb.train method for the positive model
+  dmatrix_positive <- xgb.DMatrix(
+    data = as.matrix(positive_data),
+    label = positive_target
+  )
+  
+  # Training the positive model
+  positive_model <- xgb.train(
+    params = params_positive,
+    data = dmatrix_positive,
+    nrounds = 200
+  )
+  
+  # Include the feature names in the return object
+  model_features <- names(numeric_data)
+  
+  if(save_model == TRUE){
+    saveRDS(
+      list(
+        logistic_model = logistic_model,
+        positive_model = positive_model,
+        features = model_features
+      ),
+      paste0("../Models/", model_name, ".rds")
+    )
+  }
+  
+  # Return both models
+  return(
+    list(
+      logistic_model = logistic_model,
+      positive_model = positive_model,
+      features = model_features
+    )
+  )
+}
+predict_delta_model_old <- function(model, newdata) {
+  library(xgboost)
+  library(dplyr)
+  
+  # Use the features stored in the model object
+  model_features <- model$features
+  
+  # Ensure newdata contains only the features used during training
+  newdata_numeric <- newdata %>% 
+    select(all_of(model_features)) # Use model_features to select features
+  
+  # DMatrix object for the prediction
+  dmatrix_newdata <- xgb.DMatrix(data = as.matrix(newdata_numeric))
+
+  # Predict presence/absence using the logistic model
+  presence_probabilities <- predict(model$logistic_model, dmatrix_newdata)
+  
+  # Initialize predictions vector
+  final_predictions <- rep(0, nrow(newdata))
+  
+  # Predict with the positive model where presence is likely
+  positive_indices <- which(presence_probabilities > 0.5)
+  if (length(positive_indices) > 0) {
+    positive_newdata <- newdata_numeric[positive_indices, , drop = FALSE]
+    dmatrix_positive_newdata <- xgb.DMatrix(data = as.matrix(positive_newdata))
+    positive_predictions <- predict(model$positive_model, dmatrix_positive_newdata)
+    final_predictions[positive_indices] <- positive_predictions
+  }
+  
+  return(final_predictions)
+}
+
+set.seed(123) # For reproductibility
+
+# Remove the Surface and Abundance columns
+model_data = data_merlan %>% select(-c(Surface,Abundance))
+
+delta_model_old <- train_delta_model_old(
+  data = model_data,
+  target = "Density",
+  save_model = TRUE
+)
+```
+
+Then we can do our stuff
+
+```{r}
+library(Metrics)
+
+# Supposons que positive_model_with_log et positive_model_without_log sont tes deux modèles
+# Et que test_data est déjà préparé et divisé en features et target
+
+# Appliquer la validation croisée et calculer les erreurs
+errors_old_model <- lapply(seq_along(folds), function(i) {
+  train_index <- folds[[i]]
+  test_index <- setdiff(seq_len(nrow(model_data)), train_index)
+  cross_val(train_index, test_index, model_data, delta_model_old)
+})
+
+# Compute the rmse with the old model
+mean_rmse_old <- mean(sapply(errors_old_model, `[[`, "RMSE"))
+
+# Compute the range to have a percentage rmse
+range_density <- range(model_data$Density, na.rm = TRUE)
+range_density_value <- range_density[2] - range_density[1]
+
+# Compute the perc rmse
+rmse_with_log <- cvrmse
+rmse_without_log <- mean_rmse_old / range_density_value
+
+# Afficher les RMSE
+cat("RMSE avec transformation log: ", rmse_with_log, "\n")
+cat("RMSE sans transformation log: ", rmse_without_log, "\n")
+
+```
+
+Balbla
+
+```{r}
+library(dplyr)
+library(xgboost)
+library(Metrics)
+
+set.seed(123)  # Pour la reproductibilité
+
+# Préparation des données
+model_data <- data_merlan %>% select(-c(Surface, Abundance))
+
+# Création des plis pour la validation croisée
+folds <- createFolds(model_data$Density, k = 10)
+
+# Fonction pour effectuer la validation croisée et calculer les métriques pour les deux modèles
+cross_val_comparison <- function(train_index, test_index, data) {
+  train_data <- data[train_index, ]
+  test_data <- data[test_index, ]
+  
+  # Entraînement et prédiction avec le modèle sans transformation log
+  trained_model_old <- train_delta_model_old(train_data, "Density")
+  predictions_old <- predict_delta_model_old(trained_model_old, test_data %>% select(-Density))
+  
+  # Entraînement et prédiction avec le modèle avec transformation log
+  trained_model_new <- train_delta_model(train_data, "Density")
+  predictions_new <- predict_delta_model(trained_model_new, test_data %>% select(-Density))
+  
+  # Calcul des métriques pour les deux modèles
+  rmse_old <- rmse(test_data$Density, predictions_old)
+  mae_old <- mae(test_data$Density, predictions_old)
+  rmse_new <- rmse(test_data$Density, predictions_new)
+  mae_new <- mae(test_data$Density, predictions_new)
+  
+  # Renvoyer les métriques
+  return(list(
+    RMSE_old = rmse_old,
+    MAE_old = mae_old,
+    RMSE_new = rmse_new,
+    MAE_new = mae_new
+  ))
+}
+
+# Appliquer la validation croisée et calculer les erreurs pour les deux configurations
+errors_comparison <- lapply(seq_along(folds), function(i) {
+  train_index <- folds[[i]]
+  test_index <- setdiff(seq_len(nrow(model_data)), train_index)
+  cross_val_comparison(train_index, test_index, model_data)
+})
+
+# Calculer la moyenne des erreurs pour chaque modèle
+mean_rmse_old <- mean(sapply(errors_comparison, `[[`, "RMSE_old"))
+mean_mae_old <- mean(sapply(errors_comparison, `[[`, "MAE_old"))
+mean_rmse_new <- mean(sapply(errors_comparison, `[[`, "RMSE_new"))
+mean_mae_new <- mean(sapply(errors_comparison, `[[`, "MAE_new"))
+
+range = diff(range(model_data$Density))
+
+# Afficher les résultats pour les deux modèles
+cat("RMSE moyen (sans log):", mean_rmse_old/range, "\n")
+cat("MAE moyen (sans log):", mean_mae_old/range, "\n")
+cat("RMSE moyen (avec log):", mean_rmse_new/range, "\n")
+cat("MAE moyen (avec log):", mean_mae_new/range, "\n")
+```
