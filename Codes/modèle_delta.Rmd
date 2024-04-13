@@ -420,9 +420,9 @@ train_delta_model <- function(data, target, save_model = FALSE, model_name = "de
     select(-all_of(target))
   
   # Creating the positive target
-  positive_target <- data %>% 
+  positive_target <- log1p(data %>% 
     filter(!!as.name(target) > 0) %>% 
-    pull(!!as.name(target))
+    pull(!!as.name(target)))
   
   # Defining the dmatrix object for xgb.train method for the logistic model
   dmatrix_logistic <- xgb.DMatrix(
@@ -525,10 +525,11 @@ predict_delta_model <- function(model, newdata) {
   # Predict with the positive model where presence is likely
   positive_indices <- which(presence_probabilities > 0.5)
   if (length(positive_indices) > 0) {
-    # Ensure feature selection for positive prediction matches training
     positive_newdata <- newdata_numeric[positive_indices, , drop = FALSE]
     dmatrix_positive_newdata <- xgb.DMatrix(data = as.matrix(positive_newdata))
-    positive_predictions <- predict(model$positive_model, dmatrix_positive_newdata)
+    positive_predictions_log <- predict(model$positive_model, dmatrix_positive_newdata)
+    # Applying the exponential function to invert the logarithmic transformation
+    positive_predictions <- expm1(positive_predictions_log)
     final_predictions[positive_indices] <- positive_predictions
   }
   
@@ -550,12 +551,12 @@ model_data = data_merlan %>% select(-c(Surface,Abundance))
 
 delta_model = readRDS("../Models/delta_model.rds")
 
-prediction_data = model_data %>% select(-Density)
-
-predictions_delta_model <- predict_delta_model(
-  model = delta_model,
-  newdata = prediction_data
-)
+# prediction_data = model_data %>% select(-Density)
+# 
+# predictions_delta_model <- predict_delta_model(
+#   model = delta_model,
+#   newdata = prediction_data
+# )
 ```
 
 ## Visualization
