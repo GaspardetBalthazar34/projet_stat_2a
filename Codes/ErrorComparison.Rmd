@@ -248,9 +248,6 @@ predict_delta_model_old <- function(model, newdata) {
 
 set.seed(123) # For reproductibility
 
-# Remove the Surface and Abundance columns
-model_data = data_merlan %>% select(-c(Surface,Abundance))
-
 delta_model_old <- train_delta_model_old(
   data = model_data,
   target = "Density",
@@ -353,4 +350,47 @@ cat("RMSE moyen (sans log):", mean_rmse_old/range, "\n")
 cat("MAE moyen (sans log):", mean_mae_old/range, "\n")
 cat("RMSE moyen (avec log):", mean_rmse_new/range, "\n")
 cat("MAE moyen (avec log):", mean_mae_new/range, "\n")
+```
+
+## Error with and without extreme values :
+
+```{r}
+library(caret)
+library(dplyr)
+library(Metrics)
+
+set.seed(123) # Pour la reproductibilité
+
+# Préparer les données et exclure les valeurs de densité extrêmes
+# model_data <- data_merlan %>%
+#   select(-c(Surface, Abundance))
+
+# Appliquer le filtre et vérifier le nombre de lignes
+model_data_filtered <- model_data %>% filter(Density < 150)
+
+# Assure-toi que 'folds' est créé à partir de 'model_data_filtered' et non de 'model_data'
+folds <- createFolds(model_data_filtered$Density, k = 10)
+
+# Appliquer la validation croisée et calculer les erreurs
+errors <- lapply(seq_along(folds), function(i) {
+  train_index <- folds[[i]]
+  test_index <- setdiff(seq_len(nrow(model_data_filtered)), train_index)
+  cross_val(train_index, test_index, model_data_filtered, delta_model)
+})
+
+# Calculer la moyenne des erreurs pour les densités < 150
+mean_rmse_filtered <- mean(sapply(errors, `[[`, "RMSE"))
+mean_mae_filtered <- mean(sapply(errors, `[[`, "MAE"))
+
+# Calcul de la RMSE relative pour les données avec toutes les valeurs
+range_full <- diff(range(model_data$Density, na.rm = TRUE))
+rmse_relative_full <- mean_rmse_new / range_full
+
+# Calcul de la RMSE relative pour les données sans les valeurs extrêmes
+range_filtered <- diff(range(model_data_filtered$Density, na.rm = TRUE))
+rmse_relative_filtered <- mean_rmse_filtered / range_filtered
+
+# Affichage des RMSE relatives pour comparaison
+print(paste("RMSE relative avec toutes les valeurs:", rmse_relative_full))
+print(paste("RMSE relative pour densité < 150:", rmse_relative_filtered))
 ```

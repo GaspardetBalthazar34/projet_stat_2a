@@ -32,7 +32,7 @@ gr_positive <- xgb.plot.tree(model = delta_model$positive_model,
                              plot_width = 2400,
                              plot_height = 3600,
                              render = FALSE,
-                             feature_names = colnames(train_data[-which(names(train_data) == "Density")])  # Exclure la colonne cible si elle est incluse
+                             feature_names = delta_model$features  # Exclure la colonne cible si elle est incluse
                             )
 
 # Enregistrement du graphique dans un fichier

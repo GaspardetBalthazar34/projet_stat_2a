@@ -398,12 +398,18 @@ rmse_dens_pos
 Creating the delta model !
 
 ```{r}
-train_delta_model <- function(data, target, save_model = FALSE, model_name = "delta_model"){
+# Keeps track of the rmse to make a rmse graph // nrounds
+rmse_tracker <- list()
+
+# function to do callbacks
+cb <- function(env) {
+  iter <- env$iteration
+  rmse_tracker[[iter + 1]] <- env$evaluation$log[[1]]
+}
+
+train_delta_model <- function(data, target, nrounds = 200, save_model = FALSE, model_name = "delta_model"){
   library(xgboost)
   library(dplyr)
-  
-  # Ensure the target column is a character string
-  # target <- deparse(substitute(target))
   
   # Selecting only the numeric variables and removing the target column for the logistic model
   numeric_data <- data %>%
@@ -446,7 +452,7 @@ train_delta_model <- function(data, target, save_model = FALSE, model_name = "de
   logistic_model <- xgb.train(
     params = params_logistic,
     data = dmatrix_logistic,
-    nrounds = 200
+    nrounds = nrounds
   )
   
   # Parameters for the positive model
@@ -471,7 +477,7 @@ train_delta_model <- function(data, target, save_model = FALSE, model_name = "de
   positive_model <- xgb.train(
     params = params_positive,
     data = dmatrix_positive,
-    nrounds = 200
+    nrounds = nrounds,
   )
   
   # Include the feature names in the return object
@@ -537,26 +543,41 @@ predict_delta_model <- function(model, newdata) {
 }
 ```
 
+Here's a function to create the model data
+
+```{r}
+create_model_data <- function(data){
+  library(dplyr)
+  
+  # Remove the unused columns
+out = data_merlan %>%
+  select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean)) %>% 
+  mutate(substrat = as.numeric(substrat))
+
+  return(out)
+}
+```
+
+Then we train the model on the data
+
 ```{r}
 set.seed(123) # For reproductibility
 
 # Remove the Surface and Abundance columns
-model_data = data_merlan %>% select(-c(Surface,Abundance))
+# model_data = data_merlan %>%
+#   select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean)) %>% 
+#   mutate(substrat_num = as.numeric(substrat)) %>% 
+#   select(-substrat)
+  
+model_data = create_model_data(data_merlan)
 
-# delta_model <- train_delta_model(
-#   data = model_data,
-#   target = "Density",
-#   save_model = TRUE
-# )
+delta_model <- train_delta_model(
+  data = model_data,
+  target = "Density",
+  save_model = TRUE
+)
 
 delta_model = readRDS("../Models/delta_model.rds")
-
-# prediction_data = model_data %>% select(-Density)
-# 
-# predictions_delta_model <- predict_delta_model(
-#   model = delta_model,
-#   newdata = prediction_data
-# )
 ```
 
 ## Visualization

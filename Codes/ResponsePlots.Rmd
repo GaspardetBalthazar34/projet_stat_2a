@@ -1,0 +1,36 @@
+# Response Plots
+
+Let's use for instance the predictions from year 1998
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+prediciton_data_from_1998 <- predictions_list[["1998"]] %>% select(-x,-y)
+
+# Supposons que 'prediciton_data_from_1998' est ton dataframe
+# et que 'predicted_density' est la colonne de densité prédite
+
+# Préparer les données: retirer 'x', 'y', et 'predicted_density'
+variables_to_plot <- prediciton_data_from_1998 %>% 
+  select(-predicted_density) %>%
+  names()
+
+# Créer une fonction pour générer les response plots
+plot_response <- function(var_name, data) {
+  p <- ggplot(data, aes_string(x = var_name, y = "predicted_density")) +
+    geom_point(alpha = 0.4) +
+    theme_minimal() +
+    labs(x = var_name, y = "Predicted Density") +
+    ggtitle(paste("Response Plot for", var_name))
+  return(p)
+}
+
+# Générer les plots pour chaque variable explicative
+response_plots <- lapply(variables_to_plot, plot_response, data = prediciton_data_from_1998)
+
+# Afficher les plots
+# Tu peux utiliser la fonction 'print', 'gridExtra::grid.arrange' ou 'patchwork' pour organiser et afficher les plots
+library(gridExtra)
+do.call(grid.arrange, c(response_plots, ncol = 2))
+```
