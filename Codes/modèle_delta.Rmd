@@ -310,7 +310,7 @@ par(mfrow=c(1,2))
 graph_rmse_dens_mean <- ggplot(df_rmse_density, aes(x = iter, y = test_rmse_mean)) +
   geom_line(color = "darkblue") +  
   labs(x = "Nombre d'itérations", y = "RMSE") +  
-  ggtitle("Décroissance de la RMSE en fonction des itérations (échantillon de test)") +  
+  ggtitle("RMSE en fonction des itérations (échantillon de test)") +  
   theme_minimal()  # Thème minimal
 
 # Afficher le graphique
@@ -398,45 +398,28 @@ rmse_dens_pos
 Creating the delta model !
 
 ```{r}
-# Keeps track of the rmse to make a rmse graph // nrounds
-rmse_tracker <- list()
+library(xgboost)
+library(dplyr)
 
-# function to do callbacks
-cb <- function(env) {
-  iter <- env$iteration
-  rmse_tracker[[iter + 1]] <- env$evaluation$log[[1]]
-}
+train_delta_model <- function(data, target, nrounds = 200, early_stop_rounds = 10, save_model = FALSE, model_name = "delta_model"){
+  # Encodage one-hot de la variable catégorielle 'substrat'
+  # data <- fastDummies::dummy_cols(data_initial, select_columns = "substrat", remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
-train_delta_model <- function(data, target, nrounds = 200, save_model = FALSE, model_name = "delta_model"){
-  library(xgboost)
-  library(dplyr)
-  
-  # Selecting only the numeric variables and removing the target column for the logistic model
-  numeric_data <- data %>%
-    select_if(is.numeric) %>%
-    select(-all_of(target))
-  
-  # Creating the target for the logistic model
-  logistic_target <- ifelse(test = data[[target]]==0, 0, 1)
-  
-  # Creating the dataset for the Presence/Absence model, ensuring 'Density' is excluded
-  positive_data <- data %>% 
-    filter(!!as.name(target) > 0) %>% 
-    select_if(is.numeric) %>%
-    select(-all_of(target))
-  
-  # Creating the positive target
-  positive_target <- log1p(data %>% 
-    filter(!!as.name(target) > 0) %>% 
-    pull(!!as.name(target)))
-  
-  # Defining the dmatrix object for xgb.train method for the logistic model
-  dmatrix_logistic <- xgb.DMatrix(
-    data = as.matrix(numeric_data),
-    label = logistic_target
-  )
-  
-  # Defining the parameters for the logistic model
+  # Afficher le nom de la colonne cible pour débogage
+  print(paste("Target column:", target))
+
+  # Division en set d'entraînement et de validation
+  set.seed(123)  # Assure la reproductibilité
+  train_index <- createDataPartition(data[[target]], p = 0.8, list = FALSE)
+  train_data <- data[train_index, ]
+  validation_data <- data[-train_index, ]
+
+  # Préparation des DMatrix pour le modèle logistique
+  logistic_train_matrix <- xgb.DMatrix(data = as.matrix(select(train_data, -all_of(target))), label = ifelse(train_data[[target]] > 0, 1, 0))
+  logistic_validation_matrix <- xgb.DMatrix(data = as.matrix(select(validation_data, -all_of(target))), label = ifelse(validation_data[[target]] > 0, 1, 0))
+  logistic_watchlist <- list(train = logistic_train_matrix, eval = logistic_validation_matrix)
+
+  # Paramètres pour le modèle logistique
   params_logistic <- list(
     booster = "gbtree",
     objective = "binary:logistic",
@@ -447,15 +430,25 @@ train_delta_model <- function(data, target, nrounds = 200, save_model = FALSE, m
     subsample = 0.75,
     colsample_bytree = 1
   )
-  
-  # Training the logistic model
+
+  # Entraînement du modèle logistique
   logistic_model <- xgb.train(
+    data = logistic_train_matrix,
     params = params_logistic,
-    data = dmatrix_logistic,
-    nrounds = nrounds
+    nrounds = nrounds,
+    early_stopping_rounds = early_stop_rounds,
+    watchlist = logistic_watchlist,
+    verbose = 1
   )
-  
-  # Parameters for the positive model
+
+  # Préparation des données pour le modèle positif, appliquer la correction de Laurent
+  positive_train_data <- filter(train_data, !!sym(target) > 0)
+  positive_validation_data <- filter(validation_data, !!sym(target) > 0)
+  positive_train_matrix <- xgb.DMatrix(data = as.matrix(select(positive_train_data, -all_of(target))), label = log1p(positive_train_data[[target]]))
+  positive_validation_matrix <- xgb.DMatrix(data = as.matrix(select(positive_validation_data, -all_of(target))), label = log1p(positive_validation_data[[target]]))
+  positive_watchlist <- list(train = positive_train_matrix, eval = positive_validation_matrix)
+
+  # Paramètres pour le modèle positif
   params_positive <- list(
     booster = "gbtree",
     objective = "reg:squarederror",
@@ -466,40 +459,45 @@ train_delta_model <- function(data, target, nrounds = 200, save_model = FALSE, m
     subsample = 0.75,
     colsample_bytree = 1
   )
-  
-  # Defining the dmatrix object for xgb.train method for the positive model
-  dmatrix_positive <- xgb.DMatrix(
-    data = as.matrix(positive_data),
-    label = positive_target
-  )
-  
-  # Training the positive model
+
+  # Entraînement du modèle positif
   positive_model <- xgb.train(
+    data = positive_train_matrix,
     params = params_positive,
-    data = dmatrix_positive,
     nrounds = nrounds,
+    early_stopping_rounds = early_stop_rounds,
+    watchlist = positive_watchlist,
+    verbose = 1
   )
   
-  # Include the feature names in the return object
-  model_features <- names(numeric_data)
-  
-  if(save_model == TRUE){
+  # Calcul de la variance pour le terme d'erreur de Laurent
+positive_predictions_train <- predict(positive_model, positive_train_matrix)
+variance_log_predictions <- var(positive_predictions_train)
+
+
+  # Features utilisées
+  features <- names(data %>% select(-target))
+
+  # Sauvegarde du modèle si nécessaire
+  if(save_model) {
     saveRDS(
       list(
         logistic_model = logistic_model,
         positive_model = positive_model,
-        features = model_features
+        features = features,
+        log_pred_variance = variance_log_predictions
       ),
       paste0("../Models/", model_name, ".rds")
     )
   }
-  
-  # Return both models
+
+  # Retour des modèles et des features
   return(
     list(
       logistic_model = logistic_model,
       positive_model = positive_model,
-      features = model_features
+      features = features,
+      log_pred_variance = variance_log_predictions
     )
   )
 }
@@ -534,11 +532,13 @@ predict_delta_model <- function(model, newdata) {
     positive_newdata <- newdata_numeric[positive_indices, , drop = FALSE]
     dmatrix_positive_newdata <- xgb.DMatrix(data = as.matrix(positive_newdata))
     positive_predictions_log <- predict(model$positive_model, dmatrix_positive_newdata)
-    # Applying the exponential function to invert the logarithmic transformation
-    positive_predictions <- expm1(positive_predictions_log)
+    # Correction de Laurent appliquée ici
+    sigma_squared <- model$log_pred_variance  # récupération de la variance stockée
+    correction_factor <- exp(sigma_squared / 2)
+    positive_predictions <- expm1(positive_predictions_log) * correction_factor
     final_predictions[positive_indices] <- positive_predictions
   }
-  
+
   return(final_predictions)
 }
 ```
@@ -551,8 +551,13 @@ create_model_data <- function(data){
   
   # Remove the unused columns
 out = data_merlan %>%
-  select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean)) %>% 
-  mutate(substrat = as.numeric(substrat))
+  select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean,LogDensity))
+
+out <- fastDummies::dummy_cols(out,
+                               select_columns = "substrat",
+                               remove_first_dummy = FALSE,
+                               remove_selected_columns = TRUE
+                               )
 
   return(out)
 }
@@ -638,4 +643,31 @@ print(graphique)
 rmse_mod_delta <- sqrt(mean(df$V1 - df$predictions_delta_model)^2)
 
 (rmse_mod_delta*100)/diff(range(df$V1))
+```
+
+#### Importance des variables dans le modèle gaussien (positif)
+
+```{r}
+# Calcul de l'importance des variables pour le modèle à densité positive
+importance_matrix <- xgb.importance(feature_names = delta_model$features, model = delta_model$positive_model)
+
+# Créer un graphique de l'importance des variables
+ggplot(importance_matrix, aes(x = reorder(Feature, Gain), y = Gain)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +  # Pour rendre le graphique horizontal
+  labs(title = "Importance des Variables du modèle de densité positive", x = "Variable", y = "Gain") +
+  theme_minimal()
+
+```
+
+```{r}
+# Calcul de l'importance des variables pour le modèle à densité positive
+importance_matrix_logistic_model <- xgb.importance(feature_names = delta_model$features, model = delta_model$logistic_model)
+
+# Créer un graphique de l'importance des variables
+ggplot(importance_matrix_logistic_model, aes(x = reorder(Feature, Gain), y = Gain)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +  # Pour rendre le graphique horizontal
+  labs(title = "Importance des Variables du modèle d'absence/présence", x = "Variable", y = "Gain") +
+  theme_minimal()
 ```

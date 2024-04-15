@@ -1,170 +1,91 @@
-# Script pour les projections spatiales
-
-Let's start by loading the delta model previously trained
-
-```{r}
-# Loading delta model
-
-delta_model <- readRDS("../Models/delta_model.rds")
-```
-
-DS
-
-```{r}
-predicted_values <- predict(delta_model$positive_model, as.matrix(prepared_data), type = "response")
-summary(predicted_values)
-```
-
-d
-
-```{r}
-year = 1993:2021
-Raster_stack <- stack()
-# Vous devez ajuster ce chemin selon votre structure de fichiers
-path_to_environment <- "../Donnees/"
-
-for(Date in year){
-  env_files <- list.files(path_to_environment, pattern = paste0(Date, "\\.gri"), full.names = TRUE)
-  print(env_files)
-  if(length(env_files) > 0){
-    Current_env <- stack(env_files)
-    Current_env_model <- as.data.frame(Current_env, xy = TRUE)
-    
-    # Préparation des données selon les besoins de votre modèle
-    # Cette étape peut inclure la normalisation, la sélection de variables, etc.
-    prepared_data <- Current_env_model %>%
-      dplyr::select(delta_model$features)
-    
-    # Prédiction avec le modèle Delta
-    presence_prob <- predict(delta_model$logistic_model, as.matrix(prepared_data), type = "response")
-    density <- ifelse(presence_prob > 0.5, exp(predict(delta_model$positive_model, as.matrix(prepared_data))), 0)
-    
-    # Création du raster de densité pour l'année courante
-    density_raster <- rasterFromXYZ(data.frame(x = Current_env_model$x, y = Current_env_model$y, layer = density))
-    names(density_raster) <- as.character(Date)
-    Raster_stack <- stack(Raster_stack, density_raster)
-  }
-}
-```
-
-AD
-
-```{r}
-test = as.data.frame(stack("../Donnees/Environment_2003.gri"),xy = TRUE)
-```
-
-DA
-
-```{r}
-test = na.omit(test)
-```
-
-dazdazd
-
-```{r}
-library(raster)
-library(dplyr)
-
-# Présume que 'path_to_data_tidy' est défini et pointe vers l'emplacement correct de vos données.
-path_to_environment <- paste0("../Donnees/")
-
-# Créez une pile de raster vide que vous remplirez avec des prédictions
-Raster_stack <- stack()
-years <- 1993:2021
-
-# Bouclez sur chaque année
-for (Date in years) {
-  # Générez le chemin complet vers les fichiers pour l'année actuelle
-  env_files <- list.files(path_to_environment, pattern = paste0(Date, "\\.gri$"), full.names = TRUE)
-  
-  # Si des fichiers pour l'année sont trouvés, continuez
-  if (length(env_files) > 0) {
-    # Chargez les données environnementales comme un raster stack
-    env_raster_stack <- stack(env_files)
-    
-    # Convertissez les données raster en data.frame pour la prédiction
-    env_data <- as.data.frame(env_raster_stack, xy = TRUE)
-    
-    # Vous pouvez convertir certaines colonnes en facteurs si nécessaire, selon votre modèle
-    env_data = na.omit(env_data)
-
-    # Faites des prédictions en utilisant votre modèle sur les données environnementales
-    predicted_densities <- predict_delta_model(model = votre_modele, newdata = env_data)
-    
-    # Créez un raster de densité prédit à partir des valeurs prédites
-    predicted_density_raster <- rasterFromXYZ(cbind(env_data[, 1:2], est.dens = predicted_densities))
-    
-    # Nommez le raster avec l'année correspondante et ajoutez-le à la pile de rasters
-    names(predicted_density_raster) <- as.character(Date)
-    Raster_stack <- stack(Raster_stack, predicted_density_raster)
-  }
-}
-
-# À ce stade, Raster_stack contient un raster pour les prédictions de chaque année disponible
-```
-
-checking with summary
-
-```{r}
-summary(Raster_stack)
-```
-
-Other plot
-
-```{r}
-library(ggplot2)
-library(raster)
-
-# Supposons que 'Raster_map' est le raster que vous voulez visualiser
-Raster_map <- Raster_stack[[1]]  # Remplacer par le raster approprié
-
-# Convertissez le raster en un dataframe pour ggplot2
-df_raster <- as.data.frame(rasterToPoints(Raster_map))
-
-ggplot() +
-  geom_raster(data = df_raster, aes(x = x, y = y, fill = layer)) +
-  scale_fill_viridis_c() +
-  labs(title = paste("Densité en", names(Raster_map))) +
-  theme_minimal() +
-  coord_fixed()
-```
-
-```{r}
-# Vérification des valeurs prédites
-summary(df_raster$layer)
-```
-
-Vizualisation
-
-```{r}
-# plotting a specific year
-
-plot(Raster_stack[[15]], main = paste("Densité en", names(Raster_stack)[15]))
-```
-
-Saving the results
-
-```{r}
-# stack raster save
-
-writeRaster(Raster_stack, "path_to_save/projected_density.grd", format = "GTiff", overwrite = TRUE)
-```
-
-# Second test
+# PROJECTIONS SPACIALES
 
 Loading
 
 ```{r}
-library(raster)
-
-# Initialiser une liste pour stocker les données de chaque année
-environment_data_list <- list()
+# # Fonction pour encoder et reconstruire les couches raster
+# encode_substrat_in_raster <- function(raster_path) {
+#   # Charger le raster
+#   environment_data <- raster(raster_path)
+#   
+#   # Vérifier et sélectionner la couche "substrat"
+#   layer_names <- names(environment_data)
+#   substrat_layer_index <- which(layer_names == "substrat")
+#   
+#   # Si la couche "substrat" existe, procéder à l'encodage
+#   if (length(substrat_layer_index) > 0) {
+#     substrat_layer <- environment_data[[substrat_layer_index]]
+#     substrat_factor <- as.factor(substrat_layer)
+#     substrat_df <- as.data.frame(substrat_factor, xy = TRUE)  
+#     names(substrat_df) <- c("x", "y", "substrat")
+#   
+#     # Appliquer l'encodage one-hot
+#     substrat_encoded <- fastDummies::dummy_cols(substrat_df, select_columns = "substrat", remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+#     
+#     # Reconstruire le raster pour chaque couche one-hot
+#     new_layers <- list()
+#     for (col in names(substrat_encoded)[!names(substrat_encoded) %in% c("x", "y")]) {
+#       new_layer <- raster(environment_data, template=environment_data)
+#       values(new_layer) <- substrat_encoded[[col]]
+#       new_layers[[col]] <- new_layer
+#     }
+#     
+#     # Combinez les nouvelles couches avec les autres couches non-modifiées du raster original
+#     new_stack <- stack(new_layers, environment_data[-substrat_layer_index])
+#     return(new_stack)
+#   } else {
+#     # Si pas de couche "substrat", retourner le raster original sans modification
+#     return(environment_data)
+#   }
+# }
+# 
+# # Initialiser une liste pour stocker les données de chaque année
+# environment_data_list <- list()
 
 for(year in 1993:2021) {
   file_path <- sprintf("../Donnees/Environment_%04d.gri", year)
-  environment_data <- stack(file_path)
-  environment_data_list[[as.character(year)]] <- environment_data
+  encoded_data <- stack(file_path)
+  environment_data_list[[as.character(year)]] <- encoded_data
 }
+
+# Charger les variables du modèle
+model_features <- readRDS("../Models/delta_model.rds")$features
+
+# Sélectionner les variables nécessaires et nettoyer les données
+cleaned_data_list <- lapply(environment_data_list, function(data) {
+  # Convertir le raster en data frame
+  data_df <- as.data.frame(data, xy = TRUE)
+  
+  data_df <- fastDummies::dummy_cols(data_df,
+                               select_columns = "substrat",
+                               remove_first_dummy = FALSE,
+                               remove_selected_columns = TRUE
+                               )
+
+  # Sélectionner uniquement les colonnes nécessaires pour le modèle
+  selected_data <- data_df[, c("x", "y", model_features)]
+
+  # Enlever les lignes contenant des valeurs NA
+  clean_data <- na.omit(selected_data)
+  
+  return(clean_data)
+})
+
+## Charger le modèle
+delta_model <- readRDS("../Models/delta_model.rds")
+
+# Faire des prédictions pour chaque tableau
+predictions_list <- lapply(cleaned_data_list, function(data) {
+  # Création d'un dataset sans les colonnes x, y pour la prédiction
+  prediction_data <- select(data, -x, -y)
+  
+  # Faire des prédictions
+  predicted_density <- predict_delta_model(delta_model, newdata = prediction_data)
+  
+  # Ajouter les prédictions comme une nouvelle colonne au dataset original
+  data$predicted_density <- predicted_density
+  return(data)
+})
 ```
 
 Preparing the data for the model
@@ -249,25 +170,44 @@ ggplot(data_to_plot, aes(x = x, y = y, fill = predicted_density)) +
 3rd plot
 
 ```{r}
-library(ggplot2)
-library(scales)
+# Calcul des quantiles pour définir les points de rupture de l'échelle de couleurs
+# quantile_breaks <- function(data, probs = c(0, 0.25, 0.5, 0.75, 1)) {
+#   quantiles <- quantile(data, probs = probs, na.rm = TRUE)
+#   return(quantiles)
+# }
+# 
+# # Définir la palette de couleurs pour les quantiles
+# quantile_colours <- c("white", "skyblue", "blue", "darkblue", "navy")
 
 for(year in 1993:2021){
   data_to_plot <- predictions_list[[as.character(year)]]
-  # Supposons que data_to_plot est ton DataFrame avec les prédictions de densité
-  dernier_plot <- ggplot(data_to_plot, aes(x = x, y = y, fill = predicted_density)) +
+  
+  # Calculer le maximum de la densité prédite pour l'année
+  max_density <- max(data_to_plot$predicted_density, na.rm = TRUE)
+
+  # Créer les groupes basés sur les quartiles définis linéairement
+  data_to_plot$density_group <- cut(
+    data_to_plot$predicted_density,
+    breaks = c(0, 1e-5, max_density/4, max_density/2, 3*max_density/4, max_density),
+    include.lowest = TRUE,
+    labels = c(
+      "0",
+      paste0("1 Quart [>0, ",max_density/4,"]"),
+      paste0("2 Quart [",max_density/4,",",max_density/2,"]"),
+      paste0("3 Quart [",max_density/2,",",3*max_density/4,"]"),
+      paste0("4 Quart [",3*max_density/4,",",max_density,"]")
+              )
+  )
+
+  # Assigner une couleur à chaque groupe de densité
+  colors <- c("white", "skyblue", "darkcyan","blue", "darkblue")
+
+  dernier_plot <- ggplot(data_to_plot, aes(x = x, y = y, fill = density_group)) +
     geom_tile() +
-    scale_fill_gradientn(
-      colours = c("white", "blue", "green", "yellow", "red"),
-      values = rescale(c(0, 0.1, 0.2, 0.5, 1)),
-      limits = c(0, max(data_to_plot$predicted_density, na.rm = TRUE)),
-      breaks = c(0, 0.1, max(data_to_plot$predicted_density, na.rm = TRUE)),
-      labels = c("0", "0.1", max(data_to_plot$predicted_density, na.rm = TRUE)),
-      guide = guide_colorbar(ticks = TRUE, nbin = 500)
-    ) +
+    scale_fill_manual(values = colors) +
     coord_fixed(ratio = 1) +
     labs(
-      title = paste0("Fish Density Map ",year),
+      title = paste0("Fish Density Map ", year),
       fill = "Fish Density",
       x = "Longitude",
       y = "Latitude"
@@ -279,11 +219,11 @@ for(year in 1993:2021){
       legend.title = element_text(size = 12),
       legend.text = element_text(size = 10),
       plot.title = element_text(size = 14, face = "bold"),
-      legend.key.size = unit(1.5, "lines"),  # Augmenter la taille de la légende
+      legend.key.size = unit(1.5, "lines"),
       legend.position = "right"
-    ) +
-    theme(panel.spacing = unit(0, "lines"))  # Réduire l'espacement autour de la carte
-  
-  ggsave(paste0("../Outputs/fish_density_map_",year,".png"), plot = dernier_plot, width = 10, height = 8, dpi = 1200)
+    )
+
+  # Sauvegarde du plot
+  ggsave(paste0("../Outputs/fish_density_map_", year, ".png"), plot = dernier_plot, width = 10, height = 8, dpi = 1200)
 }
 ```

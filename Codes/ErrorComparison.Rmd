@@ -9,9 +9,6 @@ library(Metrics)
 
 set.seed(123) # Pour la reproductibilité
 
-# Préparer les données (s'assurer que `data_merlan` est ton DataFrame)
-model_data <- data_merlan %>% select(-c(Surface, Abundance))
-
 # Importer le modèle delta
 delta_model <- readRDS("../Models/delta_model.rds")
 

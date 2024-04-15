@@ -34,3 +34,69 @@ response_plots <- lapply(variables_to_plot, plot_response, data = prediciton_dat
 library(gridExtra)
 do.call(grid.arrange, c(response_plots, ncol = 2))
 ```
+
+```{r}
+predicioon_data_from_1998 <- predictions_list[["1998"]] %>% select(-x, -y)
+
+# Préparer les données: retirer 'x', 'y', et 'predicted_density'
+variables_to_plot <- names(
+  prediction_data_from_1998 %>% select(-predicted_density))
+
+# Créer une fonction pour générer et enregistrer les response plots
+plot_response <- function(var_name, data) {
+  p <- ggplot(data, aes_string(x = var_name, y = "predicted_density")) +
+    geom_point(alpha = 0.7) +
+    theme_minimal() +
+    labs(x = var_name, y = "Predicted Density") +
+    ggtitle(paste("Response Plot for", var_name)) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  # Sauvegarde du plot dans un fichier
+  file_name <- paste0("../Outputs/ResponsePlots/", var_name, "_response_plot.png")
+  ggsave(file_name, plot = p, width = 10, height = 6)
+  
+  return(p)
+}
+
+# Créer un dossier s'il n'existe pas
+if (!dir.exists("../Outputs/ResponsePlots/")) {
+  dir.create("../Outputs/ResponsePlots/")
+}
+
+# Générer et enregistrer les plots pour chaque variable explicative
+response_plots <- lapply(variables_to_plot, plot_response, data = prediction_data_from_1998)
+```
+
+```{r}
+# Supposons que 'predictions_list' est votre liste contenant les données
+prediction_data_from_1998 <- predictions_list[["1998"]] %>% select(-x, -y)
+
+# Fonction modifiée pour retourner le substrat actif
+get_substrat <- function(row) {
+  # Trouver l'indice du substrat actif, qui est égal à 1
+  active_substrat <- which(row == 1)
+  if (length(active_substrat) == 1) {
+    # Retourner le numéro du substrat sous forme de facteur
+    return(as.factor(sub("substrat_", "", names(row)[active_substrat])))
+  } else {
+    # Retourner NA si aucun substrat actif n'est trouvé ou s'il y a plus d'un substrat actif
+    return(as.factor(NA))
+  }
+}
+
+substrat_columns = c("substrat_2", "substrat_3", "substrat_4", "substrat_5", "substrat_6")
+
+# Appliquer la fonction sur chaque ligne pour créer la nouvelle variable catégorielle
+prediction_data_from_1998$substrat_reunited <- apply(
+  prediction_data_from_1998[substrat_columns], 
+  1, 
+  get_substrat
+)
+
+# Réaliser un boxplot de la densité prédite en fonction de cette nouvelle variable catégorielle
+ggplot(prediction_data_from_1998, aes(x = substrat_reunited, y = predicted_density)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Predicted Density by Substrat Type", x = "Substrat Type", y = "Predicted Density") +
+  theme_minimal()
+
+```

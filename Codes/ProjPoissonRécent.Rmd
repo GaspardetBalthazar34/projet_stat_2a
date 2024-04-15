@@ -12,7 +12,7 @@ editor_options:
 
 ```{r results="hide"}
 # On charge les librairies
-requiredPackages = c("xgboost", "caret", "dplyr", "corrplot", "ggplot2", "caret", "Ckmeans.1d.dp", "DiagrammeR","dismo", "raster", "scales")
+requiredPackages = c("xgboost", "caret", "dplyr", "corrplot", "ggplot2", "caret", "Ckmeans.1d.dp", "DiagrammeR","dismo", "raster", "scales", "fastDummies","scales")
 
 for(pkge in requiredPackages) {
 if (!require(pkge, character.only = TRUE))
@@ -147,6 +147,34 @@ afficher_dens_et_norm <- function(nom_variable) {
 }
 ```
 
+[Création de la fonction pour afficher les valeurs après une transfo log :]{.underline}
+
+```{r}
+# Fonction pour afficher la densité avec la loi normale associée
+
+afficher_dens_et_norm_log <- function(nom_variable) {
+  
+  ggplot(data_merlan, aes(x = log1p(!!sym(nom_variable)))) +
+    
+    # Afficher les densités
+    geom_density(fill = "skyblue", color = "black", alpha = 0.7) +
+    
+    # Calcul de la moyenne et de la variance
+    stat_function(fun = dnorm, 
+                  args = list(mean = mean(log1p(data_merlan[[nom_variable]])), 
+                              sd = sd(log1p(data_merlan[[nom_variable]]))), 
+                  color = "blue", 
+                  size = 1) +
+    
+    # Légendes
+    labs(title = paste0("Density Plot of log(", nom_variable,"+1)"),
+         x = paste("log ",nom_variable),
+         y = "Density") +
+    
+    theme_minimal()
+}
+```
+
 **Variables cibles :**
 
 ```{r}
@@ -156,6 +184,15 @@ variable_names_target <- c("Abundance", "Density")
 for (variable in variable_names_target) {
     print(afficher_dens_et_norm(variable))
 }
+```
+
+**Affichage de la densité après une log-transformation :**
+
+```{r}
+data_merlan <- data_merlan %>% 
+  mutate(LogDensity = log1p(Density))
+
+print(afficher_dens_et_norm("LogDensity"))
 ```
 
 **Variables au pif :**

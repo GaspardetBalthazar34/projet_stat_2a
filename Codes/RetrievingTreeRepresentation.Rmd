@@ -12,7 +12,7 @@ Saving last tree from logistic model
 ```{r}
 # Préparation du graphique pour l'arbre spécifique
 gr_logistic <- xgb.plot.tree(model = delta_model$logistic_model,
-                             trees = 198,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
+                             trees = delta_model$logistic_model$best_iteration,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
                              plot_width = 2400,
                              plot_height = 3600,
                              render = FALSE,
@@ -23,12 +23,12 @@ gr_logistic <- xgb.plot.tree(model = delta_model$logistic_model,
 export_graph(gr_logistic, '../Outputs/Trees/logistic_model_tree.png', width = 2400, height = 3600)
 ```
 
-Saving last tree from positive mode
+Saving last tree from positive model
 
 ```{r}
 # Préparation du graphique pour l'arbre spécifique
 gr_positive <- xgb.plot.tree(model = delta_model$positive_model,
-                             trees = 198,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
+                             trees = delta_model$positive_model$best_iteration,  # Assure-toi que cet index est correct et que le modèle contient au moins 99 arbres
                              plot_width = 2400,
                              plot_height = 3600,
                              render = FALSE,
