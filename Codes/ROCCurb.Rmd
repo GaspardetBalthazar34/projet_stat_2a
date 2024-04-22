@@ -1,0 +1,89 @@
+Printing the ROC curve
+
+```{r}
+# Division des données en ensemble d'entraînement et de validation
+train_index <- createDataPartition(data_merlan$Density, p = 0.8, list = FALSE)
+train_data <- data_merlan[train_index, ]
+validation_data <- data_merlan[-train_index, ]
+
+# Préparation des DMatrix pour le modèle logistique
+logistic_train_matrix <- xgb.DMatrix(data = as.matrix(select(train_data, -Density)), label = ifelse(train_data$Density > 0, 1, 0))
+logistic_validation_matrix <- xgb.DMatrix(data = as.matrix(select(validation_data, -Density)), label = ifelse(validation_data$Density > 0, 1, 0))
+
+# Prédire les probabilités de présence sur les données de validation
+validation_prob <- predict(delta_model$logistic_model, logistic_validation_matrix)
+
+# Préparer les vraies étiquettes (binaire)
+true_labels <- ifelse(validation_data$Density > 0, 1, 0)  # Assurez-vous que 'Density' est la bonne colonne cible
+
+# Créer un objet de prédictions pour ROCR
+pred <- prediction(validation_prob, true_labels)
+
+# Calcul de la performance ROC
+perf <- performance(pred, "tpr", "fpr")
+
+# Tracer la courbe ROC
+plot(perf, colorize = TRUE)
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+```
+
+```{r}
+# Assumons que train_delta_model a été adaptée pour retourner juste le modèle logistique
+train_temp_delta_model <- function(data, target){
+  set.seed(123)  # Assure la reproductibilité
+  train_index <- createDataPartition(data[[target]], p = 0.8, list = FALSE)
+  train_data <- data[train_index, ]
+  validation_data <- data[-train_index, ]
+
+  logistic_train_matrix <- xgb.DMatrix(data = as.matrix(select(train_data, -all_of(target))), label = ifelse(train_data[[target]] > 0, 1, 0))
+  logistic_validation_matrix <- xgb.DMatrix(data = as.matrix(select(validation_data, -all_of(target))), label = ifelse(validation_data[[target]] > 0, 1, 0))
+  logistic_watchlist <- list(train = logistic_train_matrix, eval = logistic_validation_matrix)
+
+  params_logistic <- list(
+    booster = "gbtree",
+    objective = "binary:logistic",
+    eta = 0.05,
+    gamma = 0.1,
+    max_depth = 6,
+    min_child_weight = 3,
+    subsample = 0.75,
+    colsample_bytree = 1
+  )
+
+  logistic_model <- xgb.train(
+    params = params_logistic,
+    data = logistic_train_matrix,
+    nrounds = 500,
+    watchlist = logistic_watchlist,
+    verbose = 1,
+    early_stopping_rounds = 10
+  )
+
+  return(list(model = logistic_model, validation_matrix = logistic_validation_matrix))
+}
+
+# Utilisation de la fonction
+
+results <- train_temp_delta_model(model_data, "Density")
+temp_logistic_model <- results$model
+logistic_validation_matrix <- results$validation_matrix
+
+# Prédire les probabilités sur le set de validation
+validation_prob <- predict(temp_logistic_model, logistic_validation_matrix)
+
+validation_prob = ifelse(validation_prob > 0.5,1,0)
+
+# Préparer les vraies étiquettes (binaire)
+validation_labels <- ifelse(model_data[-train_index, "Density"] > 0, 1, 0)
+
+# Créer un objet de prédictions pour ROCR
+pred <- prediction(validation_prob, validation_labels)
+
+# Calcul de la performance ROC
+perf <- performance(pred, "tpr", "fpr")
+
+# Tracer la courbe ROC
+plot(perf, colorize = TRUE)
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```

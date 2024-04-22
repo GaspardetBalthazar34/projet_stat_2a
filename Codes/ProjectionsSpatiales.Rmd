@@ -227,3 +227,60 @@ for(year in 1993:2021){
   ggsave(paste0("../Outputs/fish_density_map_", year, ".png"), plot = dernier_plot, width = 10, height = 8, dpi = 1200)
 }
 ```
+
+Mean Density
+
+```{r}
+# Combiner tous les datasets de prédictions en un seul dataframe
+all_predictions <- do.call(rbind, predictions_list)
+
+# Calculer la moyenne des densités prédites pour chaque position
+average_density <- all_predictions %>%
+  group_by(x, y) %>%
+  summarise(average_density = mean(predicted_density, na.rm = TRUE))
+
+mean_max_density <- max(average_density$average_density, na.rm = TRUE)
+
+# Créer les groupes basés sur les quartiles
+average_density$density_group <- cut(
+  average_density$average_density,
+  breaks = c(0, 1e-5, mean_max_density/4, mean_max_density/2, 3*mean_max_density/4, mean_max_density),
+  include.lowest = TRUE,
+  labels = c(
+      "0",
+      paste0("1 Quart [>0, ",mean_max_density/4,"]"),
+      paste0("2 Quart [",mean_max_density/4,",",mean_max_density/2,"]"),
+      paste0("3 Quart [",mean_max_density/2,",",3*mean_max_density/4,"]"),
+      paste0("4 Quart [",3*mean_max_density/4,",",mean_max_density,"]")
+              )
+)
+
+# Assigner une couleur à chaque groupe de densité
+colors <- c("white", "skyblue", "darkcyan", "blue", "darkblue")
+
+
+# Visualiser la moyenne de la densité sur une carte
+ggplot(average_density, aes(x = x, y = y, fill = density_group)) +
+  geom_tile() +
+  scale_fill_manual(values = colors) +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "Average Fish Density Map by Quartiles",
+    fill = "Fish Density Group",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.key.size = unit(1.5, "lines"),
+    legend.position = "right"
+  )
+
+# Sauvegarder le graphique
+ggsave("../Outputs/average_fish_density_map_quartiles.png", width = 10, height = 8, dpi = 1200)
+```
