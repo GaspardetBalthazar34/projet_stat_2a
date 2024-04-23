@@ -655,6 +655,7 @@ importance_matrix <- xgb.importance(feature_names = delta_model$features, model 
 ggplot(importance_matrix, aes(x = reorder(Feature, Gain), y = Gain)) +
   geom_col(fill = "steelblue") +
   coord_flip() +  # Pour rendre le graphique horizontal
+  
   labs(title = "Importance des Variables du modèle de densité positive", x = "Variable", y = "Gain") +
   theme_minimal()
 
@@ -670,4 +671,42 @@ ggplot(importance_matrix_logistic_model, aes(x = reorder(Feature, Gain), y = Gai
   coord_flip() +  # Pour rendre le graphique horizontal
   labs(title = "Importance des Variables du modèle d'absence/présence", x = "Variable", y = "Gain") +
   theme_minimal()
+```
+
+```{r}
+importance_matrix <- importance_matrix %>%
+  mutate(Feature = reorder(Feature, -Gain))
+
+importance_matrix$Feature <- recode(importance_matrix$Feature,
+  'substrat_5' = 'Sables fins',
+  'substrat_3' = 'Graviers',
+  'substrat_4' = 'Sables',
+  'substrat_2' = 'Cailloutis'
+)
+
+ggplot(importance_matrix, aes(x = Feature, y = Gain, fill = "navy")) +
+  geom_bar(stat = "identity", width = 0.7, fill = "navy") +
+  geom_text(aes(label = sprintf("%.2f", Gain)), vjust = -0.3, color = "black", size = 3.5) +
+  labs(title = "Feature Importance Based on Gain for Gaussian model", x = "Feature", y = "Gain") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+importance_matrix_logistic_model <- importance_matrix_logistic_model %>%
+  mutate(Feature = reorder(Feature, -Gain))
+
+importance_matrix_logistic_model$Feature <- recode(importance_matrix$Feature,
+  'substrat_5' = 'Sables fins',
+  'substrat_3' = 'Graviers',
+  'substrat_4' = 'Sables',
+  'substrat_2' = 'Cailloutis'
+)
+
+ggplot(importance_matrix_logistic_model, aes(x = Feature, y = Gain, fill = "navy")) +
+  geom_bar(stat = "identity", width = 0.7, fill = "navy") +
+  geom_text(aes(label = sprintf("%.2f", Gain)), vjust = -0.3, color = "black", size = 3.5) +
+  labs(title = "Feature Importance Based on Gain for absence/presence model", x = "Feature", y = "Gain") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Adjust text angle if needed
 ```

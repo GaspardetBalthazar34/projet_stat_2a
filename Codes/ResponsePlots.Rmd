@@ -93,10 +93,63 @@ prediction_data_from_1998$substrat_reunited <- apply(
   get_substrat
 )
 
-# Réaliser un boxplot de la densité prédite en fonction de cette nouvelle variable catégorielle
+# Remplacement des noms de substrat
+prediction_data_from_1998$substrat_reunited <- factor(prediction_data_from_1998$substrat_reunited,
+  levels = c("1", "2", "3", "4", "5", "6"),
+  labels = c("Roches", "Cailloutis", "Graviers", "Sables", "Sables fins", "Vases")
+)
+
+# Exclure les zéros si nécessaire
+prediction_data_non_zero <- prediction_data_from_1998 %>%
+  filter(predicted_density > 0)
+
+# Réaliser un boxplot sans les valeurs zéro
+ggplot(prediction_data_non_zero, aes(x = substrat_reunited, y = predicted_density)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Predicted Density by Substrat Type", x = "Substrat Type", y = "Predicted Density") +
+  theme_minimal()
+
+```
+
+Without taking out zeroes
+
+```{r}
+# Supposons que 'predictions_list' est votre liste contenant les données
+prediction_data_from_1998 <- predictions_list[["1998"]] %>% select(-x, -y)
+
+# Fonction modifiée pour retourner le substrat actif
+get_substrat <- function(row) {
+  # Trouver l'indice du substrat actif, qui est égal à 1
+  active_substrat <- which(row == 1)
+  if (length(active_substrat) == 1) {
+    # Retourner le numéro du substrat sous forme de facteur
+    return(as.factor(sub("substrat_", "", names(row)[active_substrat])))
+  } else {
+    # Retourner NA si aucun substrat actif n'est trouvé ou s'il y a plus d'un substrat actif
+    return(as.factor(NA))
+  }
+}
+
+substrat_columns = c("substrat_2", "substrat_3", "substrat_4", "substrat_5", "substrat_6")
+
+# Appliquer la fonction sur chaque ligne pour créer la nouvelle variable catégorielle
+prediction_data_from_1998$substrat_reunited <- apply(
+  prediction_data_from_1998[substrat_columns], 
+  1, 
+  get_substrat
+)
+
+# Remplacement des noms de substrat
+prediction_data_from_1998$substrat_reunited <- factor(prediction_data_from_1998$substrat_reunited,
+  levels = c("1", "2", "3", "4", "5", "6"),
+  labels = c("Roches", "Cailloutis", "Graviers", "Sables", "Sables fins", "Vases")
+)
+
+# Réaliser un boxplot sans les valeurs zéro
 ggplot(prediction_data_from_1998, aes(x = substrat_reunited, y = predicted_density)) +
   geom_boxplot() +
   labs(title = "Boxplot of Predicted Density by Substrat Type", x = "Substrat Type", y = "Predicted Density") +
   theme_minimal()
+
 
 ```

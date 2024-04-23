@@ -88,53 +88,6 @@ predictions_list <- lapply(cleaned_data_list, function(data) {
 })
 ```
 
-Preparing the data for the model
-
-```{r}
-# Charger les variables du modèle
-model_features <- readRDS("../Models/delta_model.rds")$features
-
-# Sélectionner les variables nécessaires et nettoyer les données
-library(dplyr)
-
-cleaned_data_list <- lapply(environment_data_list, function(data) {
-  # Convertir le raster en data frame
-  data_df <- as.data.frame(data, xy = TRUE)
-
-  # Sélectionner uniquement les colonnes nécessaires pour le modèle
-  selected_data <- data_df[, c("x", "y", model_features)]
-
-  # Enlever les lignes contenant des valeurs NA dans les colonnes qui   intéressent le modèle
-  clean_data <- na.omit(selected_data)
-  
-  return(clean_data)
-})
-```
-
-Make predictions
-
-```{r}
-## Charger le modèle
-delta_model <- readRDS("../Models/delta_model.rds")
-
-# Faire des prédictions pour chaque tableau
-predictions_list <- lapply(cleaned_data_list, function(data) {
-  # Création d'un dataset sans les colonnes x, y pour la prédiction
-  prediction_data <- data %>%
-    select(-x, -y)  # Utilisation de select pour retirer x et y
-  
-  # Faire des prédictions
-  predicted_density <- predict_delta_model(
-    delta_model,
-    newdata = prediction_data
-    )
-  
-  # Ajouter les prédictions comme une nouvelle colonne au dataset original
-  data$predicted_density <- predicted_density
-  return(data)
-})
-```
-
 Projection
 
 ```{r}
@@ -283,4 +236,90 @@ ggplot(average_density, aes(x = x, y = y, fill = density_group)) +
 
 # Sauvegarder le graphique
 ggsave("../Outputs/average_fish_density_map_quartiles.png", width = 10, height = 8, dpi = 1200)
+```
+
+#### Carte recurrence
+
+```{r}
+percentiles <- sapply(predictions_list, function(data) {
+  quantile(data$predicted_density, probs = 0.9, na.rm = TRUE)
+})
+```
+
+Identifications of points (x,y) higher than 90 percentile
+
+```{r}
+library(dplyr)
+
+# Création d'un dataframe unique pour tous les points avec l'année
+all_data <- do.call(rbind, lapply(names(predictions_list), function(year) {
+  cbind(predictions_list[[year]], year = year)
+}))
+
+# Ajout de la colonne percentile pour chaque observation
+all_data <- all_data %>%
+  mutate(above_percentile = predicted_density > percentiles[paste0(year,".90%")])
+```
+
+Computing the frequency for each x,y
+
+```{r}
+# Assurez-vous que vous avez calculé n_years comme le nombre d'années distinctes
+n_years <- length(unique(all_data$year))
+
+# Convertir les valeurs logiques en numériques pour le calcul
+all_data$above_percentile <- as.numeric(all_data$above_percentile)
+
+recurrence_data <- all_data %>%
+  group_by(x, y) %>%
+  summarise(recurrence = sum(above_percentile) / n_years) %>%
+  ungroup()
+```
+
+Visualization
+
+```{r}
+# Utilisation de geom_raster au lieu de geom_tile pour une meilleure résolution
+ggplot(recurrence_data, aes(x = x, y = y, fill = recurrence)) +
+  geom_raster(interpolate = TRUE) + 
+  scale_fill_gradient(low = "cyan", high = "darkblue", name = "Récurrence") +
+  labs(title = "Carte de récurrence de la densité de poissons",
+       subtitle = "Fréquence des points au-dessus du 90e percentile de la densité",
+       x = "Longitude",
+       y = "Latitude") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Enregistrement avec une résolution plus élevée
+ggsave("carte_recurrence.png", width = 10, height = 8, dpi = 1000)
+
+```
+
+```{r}
+# Charger les shapefiles avec sf
+shapefile_path <- "../Donnees/data_carto/commune_francemetro_2021.shp"  # Remplacez par le chemin réel vers votre fichier .shp
+fond_carte <- st_read(shapefile_path)
+
+palette <- colorRampPalette(brewer.pal(9, "YlOrRd"))(100)
+
+# Définir les limites pour cibler le Golfe de Gascogne
+# Remplacez ces valeurs par les limites qui correspondent à votre zone d'étude
+xlim <- c(-5, 0)  # Longitudes minimale et maximale
+ylim <- c(44, 48)  # Latitudes minimale et maximale
+
+ggplot() +
+  geom_sf(data = fond_carte, fill = "lightgray", color = "gray") +
+  geom_raster(data = recurrence_data, aes(x = x, y = y, fill = recurrence), interpolate = TRUE) +
+  scale_fill_gradientn(colours = palette, name = "Récurrence") +
+  labs(title = "Carte de récurrence de la densité de poissons",
+       subtitle = "Fréquence des points au-dessus du 90e percentile de la densité",
+       x = "Longitude",
+       y = "Latitude") +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +  # Appliquer les limites définies
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Enregistrement avec une résolution plus élevée
+ggsave("../Outputs/carte_recurrence_golfe_gascogne.png", width = 10, height = 8, dpi = 300)
+
 ```

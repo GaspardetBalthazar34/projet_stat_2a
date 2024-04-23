@@ -84,6 +84,31 @@ pred <- prediction(validation_prob, validation_labels)
 perf <- performance(pred, "tpr", "fpr")
 
 # Tracer la courbe ROC
-plot(perf, colorize = TRUE)
+plot(perf,, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2, col = "gray")
+text(x = 0.6, y = 0.2, labels = paste("AUC =", round(auc_value, 3)), cex = 1.2, col = "red")
+```
+
+```{r}
+# Calcul de l'AUC
+perf <- performance(pred, "auc")
+auc_value <- perf@y.values[[1]]  # Extraire la valeur de l'AUC
+
+# Afficher l'AUC
+print(auc_value)
+
+```
+
+It might be better to compute the F1-score
+
+```{r}
+library(caret)
+
+# Supposons que validation_predictions sont vos prédictions binaires (0 ou 1)
+# et que validation_labels sont les vraies étiquettes
+conf_matrix <- confusionMatrix(data = as.factor(validation_prob), reference = as.factor(validation_labels))
+f1_score <- conf_matrix$byClass['F1']
+print(f1_score)
+cat("\n \n \n")
+print(conf_matrix)
 ```
