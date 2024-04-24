@@ -497,7 +497,8 @@ variance_log_predictions <- var(positive_predictions_train)
       logistic_model = logistic_model,
       positive_model = positive_model,
       features = features,
-      log_pred_variance = variance_log_predictions
+      log_pred_variance = variance_log_predictions,
+      test_data = validation_data
     )
   )
 }
@@ -551,7 +552,7 @@ create_model_data <- function(data){
   
   # Remove the unused columns
 out = data_merlan %>%
-  select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean,LogDensity))
+  select(-c(Surface,Abundance,sali_mean,temp_mean,o2_mean,sali_cv,chl_mean,ID,Long,Lat,Year,Month,Origin,wave_mean))
 
 out <- fastDummies::dummy_cols(out,
                                select_columns = "substrat",
@@ -581,8 +582,6 @@ delta_model <- train_delta_model(
   target = "Density",
   save_model = TRUE
 )
-
-delta_model = readRDS("../Models/delta_model.rds")
 ```
 
 ## Visualization
@@ -590,7 +589,12 @@ delta_model = readRDS("../Models/delta_model.rds")
 Just to visualize :
 
 ```{r}
-df = cbind(data_merlan$Density,predictions_delta_model)
+predictions_delta_model <- predict_delta_model(
+  model = delta_model,
+  newdata = delta_model$test_data
+  )
+
+df = cbind(delta_model$test_data$Density,predictions_delta_model)
 
 # Transform df in a real df 
 df <- data.frame(df)
@@ -625,8 +629,13 @@ Graphique 2
 # Filtrer les données pour inclure uniquement les valeurs entre 150 et 200
 # df_0to5 <- df[df$V1 >= 0 & df$V1 <= 5h]
 
+x <- log1p(df$V1)
+y <- log1p(df$predictions_delta_model)
+
+# graphique <- ggplot(df, aes(x = V1, y = predictions_delta_model)) +
+
 # create a graphe with ggplot2
-graphique <- ggplot(df, aes(x = V1, y = predictions_delta_model)) +
+graphique <- ggplot(df, aes(x = x, y = y)) +
   geom_point(shape = 4, color = "darkblue") +  
   geom_abline(intercept = 0, slope = 1, color = "lightblue", linetype = "dashed") +  
   labs(x = "Valeurs observées", y = "Prédictions") +  
