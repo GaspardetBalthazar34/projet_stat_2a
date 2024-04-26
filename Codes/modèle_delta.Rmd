@@ -485,7 +485,8 @@ variance_log_predictions <- var(positive_predictions_train)
         logistic_model = logistic_model,
         positive_model = positive_model,
         features = features,
-        log_pred_variance = variance_log_predictions
+        log_pred_variance = variance_log_predictions,
+        test_data = validation_data
       ),
       paste0("../Models/", model_name, ".rds")
     )
@@ -629,8 +630,8 @@ Graphique 2
 # Filtrer les données pour inclure uniquement les valeurs entre 150 et 200
 # df_0to5 <- df[df$V1 >= 0 & df$V1 <= 5h]
 
-x <- log1p(df$V1)
-y <- log1p(df$predictions_delta_model)
+x <- 1 + df$V1
+y <- 1 + df$predictions_delta_model
 
 # graphique <- ggplot(df, aes(x = V1, y = predictions_delta_model)) +
 
@@ -639,9 +640,9 @@ graphique <- ggplot(df, aes(x = x, y = y)) +
   geom_point(shape = 4, color = "darkblue") +  
   geom_abline(intercept = 0, slope = 1, color = "lightblue", linetype = "dashed") +  
   labs(x = "Valeurs observées", y = "Prédictions") +  
-  ggtitle("Comparaison des valeurs observées et des prédictions") +
-  ylim(0,5)+
-  xlim(0,5)+
+  ggtitle("Comparaison des valeurs observées et des prédictions avec échelle logarithmique") +
+  scale_x_log10() +  # Axe X en échelle log avec des limites et des points d'arrêt spécifiques
+  scale_y_log10() +  # Axe Y en échelle log avec des limites et des points d'arrêt spécifique
   theme_minimal()  # Thème minimal
 
 # Afficher le graphique

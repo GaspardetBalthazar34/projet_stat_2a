@@ -139,7 +139,7 @@ afficher_dens_et_norm <- function(nom_variable) {
                   size = 1) +
     
     # Légendes
-    labs(title = paste("Density Plot of", nom_variable),
+    labs(title = paste("Density Plot of ",nom_variable),
          x = nom_variable,
          y = "Density") +
     
@@ -150,28 +150,39 @@ afficher_dens_et_norm <- function(nom_variable) {
 [Création de la fonction pour afficher les valeurs après une transfo log :]{.underline}
 
 ```{r}
-# Fonction pour afficher la densité avec la loi normale associée
-
+# Fonction pour afficher la densité avec la loi normale associée et une légende
 afficher_dens_et_norm_log <- function(nom_variable) {
+  # Calcul de la moyenne et de l'écart-type des données transformées
+  moy_log <- mean(log1p(data_merlan[[nom_variable]]))
+  sd_log <- sd(log1p(data_merlan[[nom_variable]]))
   
   ggplot(data_merlan, aes(x = log1p(!!sym(nom_variable)))) +
     
-    # Afficher les densités
-    geom_density(fill = "skyblue", color = "black", alpha = 0.7) +
+    # Afficher les densités avec une esthétique nommée pour la légende
+    geom_density(aes(fill = "Densité Log+1"), color = "black", alpha = 0.7) +
     
-    # Calcul de la moyenne et de la variance
+    # Calcul et affichage de la loi normale avec une esthétique nommée pour la légende
     stat_function(fun = dnorm, 
-                  args = list(mean = mean(log1p(data_merlan[[nom_variable]])), 
-                              sd = sd(log1p(data_merlan[[nom_variable]]))), 
-                  color = "blue", 
+                  args = list(mean = moy_log, 
+                              sd = sd_log), 
+                  aes(colour = "Loi Normale"), 
                   size = 1) +
     
-    # Légendes
-    labs(title = paste0("Density Plot of log(", nom_variable,"+1)"),
-         x = paste("log ",nom_variable),
+    # Ajout des légendes personnalisées pour la couleur de remplissage et de la ligne
+    scale_fill_manual(values = "skyblue", 
+                      name = "Légende", 
+                      labels = "log(densité + 1)") +
+    scale_colour_manual(values = "blue", 
+                        name = "", 
+                        labels = paste("Loi normale (moy =", round(moy_log, 2), ", écart =", round(sd_log, 2), ")")) +
+    
+    # Légendes pour les axes et le titre
+    labs(title = paste0("Density Plot of log(+1", nom_variable,")"),
+         x = paste("log(1 + ",nom_variable,")"),
          y = "Density") +
     
-    theme_minimal()
+    theme_minimal() +
+    theme(legend.position = "bottom")  # Positionnement de la légende en bas
 }
 ```
 
@@ -189,10 +200,10 @@ for (variable in variable_names_target) {
 **Affichage de la densité après une log-transformation :**
 
 ```{r}
-data_merlan <- data_merlan %>% 
-  mutate(LogDensity = log1p(Density))
+# data_merlan <- data_merlan %>% 
+#   mutate(LogDensity = log1p(Density))
 
-print(afficher_dens_et_norm("LogDensity"))
+print(afficher_dens_et_norm_log("Density"))
 ```
 
 **Variables au pif :**

@@ -8,8 +8,7 @@ library(dplyr)
 
 set.seed(123) # Assurer la reproductibilité
 
-# Préparer les données (s'assurer que `data_merlan` est ton DataFrame)
-model_data <- data_merlan %>% select(-c(Surface, Abundance))
+model_data = create_model_data(data_merlan)
 
 # Diviser en ensemble d'entraînement et de test
 index <- createDataPartition(model_data$Density, p = 0.8, list = FALSE)
@@ -24,8 +23,8 @@ predictions <- predict_delta_model(trained_model, test_data %>% select(-Density)
 
 # Discrétiser les prédictions et les valeurs réelles
 threshold <- 0.1
-predicted_classes <- ifelse(predictions < threshold, '<0.1', '>=0.1')
-true_classes <- ifelse(test_data$Density < threshold, '<0.1', '>=0.1')
+predicted_classes <- ifelse(predictions < threshold, '<0.5', '>=0.5')
+true_classes <- ifelse(test_data$Density < threshold, '<0.5', '>=0.5')
 
 # Créer la matrice de confusion
 delta_conf_matrix <- table(Predicted = predicted_classes, True = true_classes)
@@ -47,9 +46,10 @@ library(dplyr)
 
 set.seed(123)
 
-# On teste avec la même base exactement que celle utilisée pour le modèle delta
-
-# On transforme en numeric
+# Diviser en ensemble d'entraînement et de test
+index <- createDataPartition(model_data$Density, p = 0.8, list = FALSE)
+train_data <- model_data[index, ]
+test_data <- model_data[-index, ]
 
 # S'assurer que toutes les colonnes à l'exception de 'Density' sont numériques
 train_matrix <- as.matrix(sapply(train_data[, -which(names(train_data) == "Density")], as.numeric))
@@ -109,9 +109,9 @@ names(delta_conf_df) <- c("True", "Predicted", "Count")
 # Créer un plot de heatmap pour Delta
 ggplot(delta_conf_df, aes(x = Predicted, y = True, fill = Count)) +
   geom_tile(color = "white") +  # Bordures blanches pour les tuiles
-  scale_fill_gradient(low = "blue", high = "red") +  # Utiliser un gradient de couleur foncé
-  geom_text(aes(label = Count), color = "white", size = 6) +  # Ajouter des valeurs avec du texte blanc
-  labs(title = "Matrice de confusion - Modèle Delta", x = "Valeur prédite", y = "Valeur réelle") +
+  scale_fill_gradient(low = "white", high = "lightgrey") +  # Utiliser un gradient de couleur foncé
+  geom_text(aes(label = Count), color = "black", size = 6) +  # Ajouter des valeurs avec du texte blanc
+  labs(title = "Matrice de confusion - Modèle binomial (absence/présence)", x = "Valeur prédite", y = "Valeur réelle") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
@@ -127,9 +127,9 @@ names(xgb_conf_df) <- c("True", "Predicted", "Count")
 # Créer un plot de heatmap pour XGBoost
 ggplot(xgb_conf_df, aes(x = Predicted, y = True, fill = Count)) +
   geom_tile(color = "white") +  # Bordures blanches pour les tuiles
-  geom_text(aes(label = Count), color = "white", size = 6) +  # Ajouter des valeurs avec du texte blanc
-  scale_fill_gradient(low = "blue", high = "red") +  # Utiliser un gradient de couleur foncé
-  labs(title = "Matrice de confusion - Modèle XGBoost basique", x = "Valeur prédite", y = "Valeur réelle") +
+  scale_fill_gradient(low = "white", high = "lightgrey") +  # Utiliser un gradient de couleur foncé
+  geom_text(aes(label = Count), color = "black", size = 6) +  
+  labs(title = "Matrice de confusion - Modèle classique", x = "Valeur prédite", y = "Valeur réelle") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 

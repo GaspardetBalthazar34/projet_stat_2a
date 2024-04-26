@@ -39,8 +39,8 @@ Loading
 #   }
 # }
 # 
-# # Initialiser une liste pour stocker les données de chaque année
-# environment_data_list <- list()
+# Initialiser une liste pour stocker les données de chaque année
+environment_data_list <- list()
 
 for(year in 1993:2021) {
   file_path <- sprintf("../Donnees/Environment_%04d.gri", year)
@@ -187,6 +187,10 @@ Mean Density
 # Combiner tous les datasets de prédictions en un seul dataframe
 all_predictions <- do.call(rbind, predictions_list)
 
+# Générer une palette de couleurs pour les 5 groupes de densité
+niveaux_couleur <- 5
+colors <- colorRampPalette(brewer.pal(9, "YlOrRd"))(niveaux_couleur)
+
 # Calculer la moyenne des densités prédites pour chaque position
 average_density <- all_predictions %>%
   group_by(x, y) %>%
@@ -208,11 +212,7 @@ average_density$density_group <- cut(
               )
 )
 
-# Assigner une couleur à chaque groupe de densité
-colors <- c("white", "skyblue", "darkcyan", "blue", "darkblue")
-
-
-# Visualiser la moyenne de la densité sur une carte
+# Utiliser la palette générée pour le graphique
 ggplot(average_density, aes(x = x, y = y, fill = density_group)) +
   geom_tile() +
   scale_fill_manual(values = colors) +
@@ -300,8 +300,8 @@ ggsave("carte_recurrence.png", width = 10, height = 8, dpi = 1000)
 shapefile_path <- "../Donnees/data_carto/commune_francemetro_2021.shp"  # Remplacez par le chemin réel vers votre fichier .shp
 fond_carte <- st_read(shapefile_path)
 
-palette <- colorRampPalette(brewer.pal(9, "YlOrRd"))(100)
-
+# palette <- colorRampPalette(brewer.pal(9, "YlOrRd"))(100)
+palette <- colorRampPalette(brewer.pal(9, "Blues"))(100)
 # Définir les limites pour cibler le Golfe de Gascogne
 # Remplacez ces valeurs par les limites qui correspondent à votre zone d'étude
 xlim <- c(-5, 0)  # Longitudes minimale et maximale
@@ -310,6 +310,40 @@ ylim <- c(44, 48)  # Latitudes minimale et maximale
 ggplot() +
   geom_sf(data = fond_carte, fill = "lightgray", color = "gray") +
   geom_raster(data = recurrence_data, aes(x = x, y = y, fill = recurrence), interpolate = TRUE) +
+  scale_fill_gradientn(colours = palette, name = "Récurrence") +
+  labs(title = "Carte de récurrence de la densité de poissons",
+       subtitle = "Fréquence des points au-dessus du 90e percentile de la densité",
+       x = "Longitude",
+       y = "Latitude") +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +  # Appliquer les limites définies
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Enregistrement avec une résolution plus élevée
+ggsave("../Outputs/carte_recurrence_golfe_gascogne.png", width = 10, height = 8, dpi = 300)
+
+```
+
+```{r}
+library(ggplot2)
+library(sf)
+library(dplyr)
+
+# Charger les shapefiles avec sf
+shapefile_path <- "../Donnees/data_carto/commune_francemetro_2021.shp"
+fond_carte <- st_read(shapefile_path)
+
+# Générer la palette de couleurs bleues
+palette <- colorRampPalette(brewer.pal(9, "Blues"))(100)
+
+# Définir les limites pour la carte
+xlim <- c(-5, 0)  # Remplacer par vos valeurs
+ylim <- c(44, 48)  # Remplacer par vos valeurs
+
+# Construire la carte avec ggplot
+ggplot() +
+  geom_sf(data = fond_carte, fill = "lightgray", color = "gray") +
+  geom_tile(data = recurrence_data, aes(x = x, y = y, fill = recurrence)) +  # Utilisez geom_tile au lieu de geom_raster
   scale_fill_gradientn(colours = palette, name = "Récurrence") +
   labs(title = "Carte de récurrence de la densité de poissons",
        subtitle = "Fréquence des points au-dessus du 90e percentile de la densité",
